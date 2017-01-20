@@ -1,7 +1,7 @@
 # QEagleLib
 Qt-based library for managing EagleCAD XML files.
 
-This library allows to work with schematic (\*.sch), board (\*.brd) and Library (\*.lbr) files in XML format, old binary format is not supported. Latest supported DTD version is 6.6, newer features introduced in 7.0 (modules) and 7.4 (board.limitedwidth) will be ignored.
+This library allows to work with schematic (\*.sch), board (\*.brd) and Library (\*.lbr) files in XML format, old binary format is not supported. Latest supported DTD version is 6.6, newer features introduced in 7.0 (modules) and 7.4 (board.limitedwidth) are ignored by the library when reading files, support for those may be implemented in further revisions.
 
 QEagleLib provides C++ classes for all entities described in DTD allowing for editing of existing files as well as creating new from a scratch.
 
