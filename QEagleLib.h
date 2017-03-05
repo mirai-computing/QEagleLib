@@ -200,6 +200,10 @@ class CLayer: public CEntity
   static const TLayer LAYER_VALUES    = 96;
   static const TLayer LAYER_INFO      = 97;
   static const TLayer LAYER_GUIDE     = 98;
+  //
+  static const TLayer LAYER__INVALID  = 0;
+  static const TLayer LAYER__FIRST    = 1;
+  static const TLayer LAYER__LAST     = 98;
  public:
   CLayer(const TLayer layer, const QString& name, const int color,
          const int fill, const bool visible, const bool active);
@@ -208,6 +212,7 @@ class CLayer: public CEntity
   virtual ~CLayer(void);
  public:
   static QString layerName(const TLayer layer);
+  static TLayer layerNumber(const QString& name);
   virtual void operator =(const CLayer& layer);
   virtual void clear(void);
   virtual void assign(const CLayer& layer);
@@ -698,6 +703,7 @@ class CText: public CEntity
  public:
   static QString toString(const CText::Font value);
   static QString toString(const CText::Align value);
+  static CText::Align fromString(const QString& value);
  public:
   virtual void operator =(const CText& text);
   virtual void clear(void);
@@ -1342,6 +1348,7 @@ class CAttribute: public CEntity
   int m_Ratio; // implied
   double m_Rotation; // default = 0, valid 0 .. 359.9(9)
   bool m_Reflection;
+  CText::Align m_Align;
   CAttribute::Display m_Display; // default = value
   bool m_Constant; // default = false
 };

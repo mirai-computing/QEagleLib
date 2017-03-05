@@ -512,6 +512,18 @@ QString CLayer::layerName(const TLayer layer)
  return "";
 }
 
+TLayer CLayer::layerNumber(const QString& name)
+{
+ for (int i=LAYER__FIRST; i<=LAYER__LAST; i++)
+ {
+  if (0==name.compare(layerName(i),Qt::CaseInsensitive))
+  {
+   return i;
+  }
+ }
+ return LAYER__INVALID;
+}
+
 void CLayer::operator =(const CLayer& layer)
 {
  assign(layer);
@@ -2239,6 +2251,20 @@ QString CText::toString(const CText::Align value)
  return "";
 }
 
+CText::Align CText::fromString(const QString& value)
+{
+ if (value=="bottom-left") { return CText::taBottomLeft; }
+ else if (value=="bottom-center") { return CText::taBottomCenter; }
+ else if (value=="bottom-right") { return CText::taBottomRight; }
+ else if (value=="center-left") { return CText::taCenterLeft; }
+ else if (value=="center") { return CText::taCenter; }
+ else if (value=="center-right") { return CText::taCenterRight; }
+ else if (value=="top-left") { return CText::taTopLeft; }
+ else if (value=="top-center") { return CText::taTopCenter; }
+ else if (value=="top-right") { return CText::taTopRight; }
+ return CText::taBottomLeft;
+}
+
 void CText::operator =(const CText& text)
 {
  assign(text);
@@ -2365,15 +2391,7 @@ bool CText::readFromXML(const QDomElement& root)
   s = e.attribute("align");
   if (!s.isEmpty())
   {
-   if (s=="bottom-left") { m_Align = CText::taBottomLeft; }
-   else if (s=="bottom-center") { m_Align = CText::taBottomCenter; }
-   else if (s=="bottom-right") { m_Align = CText::taBottomRight; }
-   else if (s=="center-left") { m_Align = CText::taCenterLeft; }
-   else if (s=="center") { m_Align = CText::taCenter; }
-   else if (s=="center-right") { m_Align = CText::taCenterRight; }
-   else if (s=="top-left") { m_Align = CText::taTopLeft; }
-   else if (s=="top-center") { m_Align = CText::taTopCenter; }
-   else if (s=="top-right") { m_Align = CText::taTopRight; }
+   m_Align = CText::fromString(s);
   }
   s = e.attribute("distance");
   if (!s.isEmpty())
@@ -4313,6 +4331,7 @@ void CAttribute::clear(void)
  m_Ratio = 8;
  m_Rotation  = CAttribute::DEFAULT_ROTATION;
  m_Reflection = false;
+ m_Align = CText::taBottomLeft;
  m_Display = CAttribute::DEFAULT_DISPLAY;
  m_Constant = false;
 }
@@ -4346,7 +4365,8 @@ void CAttribute::show(std::ostream& out, const int level)
  out<<"Attribute:{Name='"<<m_Name.toUtf8().data()<<"', Value='"<<m_Value.toUtf8().data()
     <<"', X="<<m_X<<", Y="<<m_Y<<", Size="<<m_Size<<", Layer="<<m_Layer
     <<", Font="<<CText::toString(m_Font).toUtf8().data()<<", Ratio="<<m_Ratio
-    <<", Rotation="<<m_Rotation<<", Display="<<toString(m_Display).toUtf8().data()
+    <<", Rotation="<<m_Rotation<<", Align="<<CText::toString(m_Align).toUtf8().data()
+    <<", Display="<<toString(m_Display).toUtf8().data()
     <<", Constant="<<CEntity::toString(m_Constant).toUtf8().data()
     <<"}"<<std::endl;
 }
@@ -4424,6 +4444,11 @@ bool CAttribute::readFromXML(const QDomElement& root)
    }
    */
   }
+  s = e.attribute("align");
+  if (!s.isEmpty())
+  {
+   m_Align = CText::fromString(s);
+  }
   s = e.attribute("display");
   if (!s.isEmpty())
   {
@@ -4469,6 +4494,10 @@ bool CAttribute::writeToXML(QDomDocument& host, QDomElement& root, const bool de
   {
    //e.setAttribute("rot",QString("R%1").arg(m_Rotation));
    e.setAttribute("rot",encodeTransformation(m_Rotation,m_Reflection,false));
+  }
+  if (defaults || CText::taBottomLeft!=m_Align)
+  {
+   e.setAttribute("align",CText::toString(m_Align));
   }
   if (defaults || CAttribute::DEFAULT_DISPLAY!=m_Display)
   {
