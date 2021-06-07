@@ -1,6 +1,6 @@
 /*
     QEagleLib * Qt based library for managing Eagle CAD XML files
-    Copyright (C) 2012-2017 Mirai Computing (mirai.computing@gmail.com)
+    Copyright (C) 2012-2021 Mirai Computing (mirai.computing@gmail.com)
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -25,7 +25,10 @@
 //------------------------------------------------------------------------------
 //#include ""
 //------------------------------------------------------------------------------
-#define EAGLE_DTD_VERSION 6.4
+#define EAGLE_DTD_MIN_VERSION 6.4
+#define EAGLE_DTD_MAX_VERSION 8.0
+#define EAGLE_DTD_VERSION EAGLE_DTD_MIN_VERSION
+#define STRING(s) #s
 
 /*
 This file implements Eagle CAD file data structures as described in "eagle.dtd"
@@ -39,6 +42,57 @@ typedef int TClass;
 typedef double TCoord; // coordinates, given in millimeters
 typedef double TDimension; // dimensions, given in millimeters
 
+QString encodeExtent(const int startLayer, const int stopLayer);
+void decodeExtent(const QString& value, int& startLayer, int& stopLayer);
+
+class CVersionNumber
+{
+ public:
+  CVersionNumber();
+  CVersionNumber(const CVersionNumber& version);
+  CVersionNumber(const unsigned int major, const unsigned int minor);
+  CVersionNumber(const QString& str);
+  virtual ~CVersionNumber();
+ public:
+  void assign(const CVersionNumber& version);
+  void assign(const unsigned int major, const unsigned int minor);
+  void assign(const QString& str);
+  //
+  unsigned int major(void) const { return m_Major; }
+  unsigned int minor(void) const { return m_Minor; }
+  QString toString(void) const;
+  //
+  bool operator ==(const CVersionNumber& version);
+  bool operator !=(const CVersionNumber& version);
+  bool operator >=(const CVersionNumber& version);
+  bool operator <=(const CVersionNumber& version);
+  bool operator >(const CVersionNumber& version);
+  bool operator <(const CVersionNumber& version);
+  CVersionNumber& operator =(const CVersionNumber& version);
+ private:
+  unsigned int m_Major;
+  unsigned int m_Minor;
+};
+
+class CEagleDocument;
+class CEagleDocumentOptions
+{
+ friend class CEagleDocument;
+ public:
+  CEagleDocumentOptions(const CEagleDocumentOptions& options);
+  CEagleDocumentOptions(void);
+  virtual ~CEagleDocumentOptions(void);
+ public:
+  bool writeDefaults() const { return m_WriteDefaults; }
+  CVersionNumber version() const { return m_Version; }
+ protected:
+  void setWriteDefaults(const bool value);
+  void setVersion(const CVersionNumber& value);
+ private:
+  bool m_WriteDefaults;
+  CVersionNumber m_Version;
+};
+
 class CEntity
 {
  public:
@@ -49,8 +103,8 @@ class CEntity
  public:
   virtual void clear(void);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
 };
 
 // miscellaneous objects
@@ -70,8 +124,8 @@ class CSettings: public CEntity
   virtual void clear(void);
   virtual void assign(const CSettings& settings);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   // getters
   bool alwaysVectorFont(void) { return m_AlwaysVectorFont; }
@@ -103,8 +157,8 @@ class CGrid: public CEntity
   virtual void assign(const CGrid& grid);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   // getters
   double distance(void) { return m_Distance; }
@@ -190,8 +244,9 @@ class CLayer: public CEntity
   static const TLayer LAYER_MEASURES  = 47;
   static const TLayer LAYER_DOCUMENT  = 48;
   static const TLayer LAYER_REFERENCE = 49;
-  static const TLayer LAYER_TDOCU     = 50;
-  static const TLayer LAYER_BDOCU     = 51;
+  static const TLayer LAYER_TDOCU     = 51;
+  static const TLayer LAYER_BDOCU     = 52;
+  static const TLayer LAYER_MODULES   = 90;
   static const TLayer LAYER_NETS      = 91;
   static const TLayer LAYER_BUSSES    = 92;
   static const TLayer LAYER_PINS      = 93;
@@ -217,8 +272,8 @@ class CLayer: public CEntity
   virtual void clear(void);
   virtual void assign(const CLayer& layer);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   // getters
   TLayer layer(void) { return m_Layer; }
@@ -254,8 +309,8 @@ class CClearance: public CEntity
   virtual void clear(void);
   virtual void assign(const CClearance& clearance);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   // getters
   TClass getClass(void) { return m_Class; }
@@ -279,8 +334,8 @@ class CDescription: public CEntity
   virtual void clear(void);
   virtual void assign(const CDescription& description);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   // getters
   QString description(void) { return m_Description; }
@@ -304,8 +359,8 @@ class CParam: public CEntity
   virtual void clear(void);
   virtual void assign(const CParam& param);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   // getters
   QString name(void) { return m_Name; }
@@ -329,8 +384,8 @@ class CApproved: public CEntity
   virtual void clear(void);
   virtual void assign(const CApproved& error);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   // getters
   QString hash(void) { return m_Hash; }
@@ -351,8 +406,8 @@ class CPass: public CEntity
   virtual void clear(void);
   virtual void assign(const CPass& pass);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   // getters
   QList<CParam*>& params(void) { return m_Params; }
@@ -382,8 +437,8 @@ class CClass: public CEntity
   virtual void clear(void);
   virtual void assign(const CClass& value);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   // getters
   QList<CClearance*>& clearances(void) { return m_Clearances; }
@@ -416,8 +471,8 @@ class CDesignRule: public CEntity
   virtual void clear(void);
   virtual void assign(const CDesignRule& designRule);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   // getters
   QList<CDescription*>& description(void) { return m_Descriptions; }
@@ -446,8 +501,8 @@ class CVariantDef: public CEntity
   virtual void clear(void);
   virtual void assign(const CVariantDef& variantDef);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   // getters
   QString name(void) { return m_Name; }
@@ -471,8 +526,8 @@ class CVariant: public CEntity
   virtual void clear(void);
   virtual void assign(const CVariant& variant);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   // getters
   QString name(void) { return m_Name; }
@@ -509,8 +564,8 @@ class CGate: public CEntity
   virtual void assign(const CGate& gate);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   // getters
   QString name(void) { return m_Name; }
@@ -556,8 +611,8 @@ class CWire: public CEntity
   virtual void assign(const CWire& wire);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   // getters
   TCoord x1(void) { return m_X1; }
@@ -614,8 +669,8 @@ class CDimension: public CEntity
   virtual void assign(const CDimension& dimension);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   static const int DEFAULT_EXT_WIDTH = 0;
   static const int DEFAULT_EXT_LENGTH = 0;
@@ -710,8 +765,8 @@ class CText: public CEntity
   virtual void assign(const CText& text);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   static const CText::Font DEFAULT_FONT = CText::tfProportional;
   static const int DEFAULT_RATIO = 8;
@@ -763,6 +818,8 @@ class CText: public CEntity
 class CCircle: public CEntity
 {
  public:
+  CCircle(const TCoord x, const TCoord y, const TCoord radius,
+   const TDimension width, const TLayer layer);
   CCircle(const CCircle& circle);
   CCircle(void);
   virtual ~CCircle(void);
@@ -772,8 +829,8 @@ class CCircle: public CEntity
   virtual void assign(const CCircle& circle);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   // getters
   TCoord x(void) { return m_X; }
@@ -798,6 +855,8 @@ class CCircle: public CEntity
 class CRectangle: public CEntity
 {
  public:
+  CRectangle(const TCoord x1, const TCoord y1, const TCoord x2, const TCoord y2,
+   const TLayer layer, const double rotation);
   CRectangle(const CRectangle& rectangle);
   CRectangle(void);
   virtual ~CRectangle(void);
@@ -807,8 +866,8 @@ class CRectangle: public CEntity
   virtual void assign(const CRectangle& rectangle);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   static const double DEFAULT_ROTATION = 0.0;
  public:
@@ -847,8 +906,8 @@ class CFrame: public CEntity
   virtual void assign(const CFrame& frame);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   // getters
   TCoord x1(void) { return m_X1; }
@@ -891,6 +950,7 @@ class CFrame: public CEntity
 class CHole: public CEntity
 {
  public:
+  CHole(const TCoord x, const TCoord y, const TDimension drill);
   CHole(const CHole& hole);
   CHole(void);
   virtual ~CHole(void);
@@ -900,8 +960,8 @@ class CHole: public CEntity
   virtual void assign(const CHole& hole);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   // getters
   TCoord x(void) { return m_X; }
@@ -933,8 +993,8 @@ class CPad: public CEntity
   virtual void assign(const CPad& pad);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   static const TDimension DEFAULT_DIAMETER = 0.0;
   static const CPad::Shape DEFAULT_SHAPE = CPad::psRound;
@@ -991,8 +1051,8 @@ class CSMD: public CEntity
   virtual void assign(const CSMD& smd);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   static const int DEFAULT_ROUNDNESS = 0;
   static const double DEFAULT_ROTATION = 0.0;
@@ -1041,6 +1101,9 @@ class CVia: public CEntity
   enum Shape {vsSquare, vsRound, vsOctagon};
  public:
   CVia(const CVia& via);
+  CVia(const TCoord x, const TCoord y, const int startLayer, const int stopLayer,
+       const TDimension drill, const TDimension diameter, const CVia::Shape shape,
+       const bool alwaysStop);
   CVia(void);
   virtual ~CVia(void);
  public:
@@ -1051,8 +1114,8 @@ class CVia: public CEntity
   virtual void assign(const CVia& via);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   static const TDimension DEFAULT_DIAMETER = 0.0;
   static const CVia::Shape DEFAULT_SHAPE = CVia::vsRound;
@@ -1096,8 +1159,8 @@ class CVertex: public CEntity
   virtual void assign(const CVertex& vertex);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   static const double DEFAULT_CURVE = 0.0;
  public:
@@ -1137,8 +1200,8 @@ class CPin: public CEntity
   virtual void assign(const CPin& pin);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   static const CPin::Visible DEFAULT_VISIBLE = CPin::pvBoth;
   static const CPin::Length DEFAULT_LENGTH = CPin::plLong;
@@ -1179,6 +1242,44 @@ class CPin: public CEntity
   double m_Rotation; // default = 0
 };
 
+class CPort: public CEntity
+{
+ public:
+  enum Side {psLeft, psRight, psTop, psBottom};
+  enum Direction {pdNC, pdIN, pdOUT, pdIO, pdOC, pdPWR, pdPAS, pdHIZ};
+ public:
+  CPort(const CPort& port);
+  CPort(void);
+  virtual ~CPort(void);
+ public:
+  static QString toString(const CPort::Side value);
+  static QString toString(const CPort::Direction value);
+ public:
+  virtual void operator =(const CPort& port);
+  virtual void clear(void);
+  virtual void assign(const CPort& port);
+  virtual void scale(const double factor);
+  virtual void show(std::ostream& out, const int level = 0);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
+ public:
+  static const CPort::Direction DEFAULT_DIRECTION = CPort::pdIO;
+ public:
+  // getters
+  QString name(void) { return m_Name; }
+  TCoord coord(void) { return m_Coord; }
+  CPort::Direction direction(void) { return m_Direction; }
+  // setters
+  void setName(const QString& value) { m_Name = value; }
+  void setCoord(const TCoord value) { m_Coord = value; }
+  void setDirection(const CPort::Direction value) { m_Direction = value; }
+ protected:
+  QString m_Name; // required
+  TCoord m_Coord; // required, offset from module center
+  CPort::Side m_Side; // required
+  CPort::Direction m_Direction; // default = io
+};
+
 class CLabel: public CEntity
 {
  public:
@@ -1191,8 +1292,8 @@ class CLabel: public CEntity
   virtual void assign(const CLabel& label);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   static const CText::Font DEFAULT_FONT = CText::tfProportional;
   static const int DEFAULT_RATIO = 8;
@@ -1240,8 +1341,8 @@ class CJunction: public CEntity
   virtual void assign(const CJunction& junction);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   // getters
   TCoord x(void) { return m_X; }
@@ -1269,8 +1370,8 @@ class CConnect: public CEntity
   virtual void clear(void);
   virtual void assign(const CConnect& connect);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   static const CConnect::Route DEFAULT_ROUTE = crAll;
  public:
@@ -1307,8 +1408,8 @@ class CAttribute: public CEntity
   virtual void assign(const CAttribute& attribute);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   static const double DEFAULT_ROTATION = 0.0;
   static const CAttribute::Display DEFAULT_DISPLAY = CAttribute::adValue;
@@ -1364,13 +1465,13 @@ class CPinRef: public CEntity
   virtual void clear(void);
   virtual void assign(const CPinRef& pinRef);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   // getters
-  QString part(void) { return m_Part; }
-  QString gate(void) { return m_Gate; }
-  QString pin(void) { return m_Pin; }
+  QString part(void) const { return m_Part; }
+  QString gate(void) const { return m_Gate; }
+  QString pin(void) const { return m_Pin; }
   // setters
   void part(const QString& value) { m_Part = value; }
   void gate(const QString& value) { m_Gate = value; }
@@ -1379,6 +1480,31 @@ class CPinRef: public CEntity
   QString m_Part; // required
   QString m_Gate; // required
   QString m_Pin; // required
+};
+
+class CPortRef: public CEntity
+{
+ public:
+  CPortRef(const CPortRef& portRef);
+  CPortRef(void);
+  virtual ~CPortRef(void);
+ public:
+  virtual void operator =(const CPortRef& portRef);
+  virtual void clear(void);
+  virtual void assign(const CPortRef& portRef);
+  virtual void show(std::ostream& out, const int level = 0);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
+ public:
+  // getters
+  QString moduleInstance(void) const { return m_ModuleInstance; }
+  QString port(void) const { return m_Port; }
+  // setters
+  void moduleInstance(const QString& value) { m_ModuleInstance = value; }
+  void port(const QString& value) { m_Port = value; }
+ protected:
+  QString m_ModuleInstance; // required
+  QString m_Port; // required
 };
 
 class CContactRef: public CEntity
@@ -1392,8 +1518,8 @@ class CContactRef: public CEntity
   virtual void clear(void);
   virtual void assign(const CContactRef& contactRef);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   static const CConnect::Route DEFAULT_ROUTE = CConnect::crAll;
  public:
@@ -1426,8 +1552,8 @@ class CTechnology: public CEntity
   virtual void assign(const CTechnology& technology);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   // getters
   QList<CAttribute*>& attributes(void) { return m_Attributes; }
@@ -1451,8 +1577,8 @@ class CInstance: public CEntity
   virtual void assign(const CInstance& instance);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   static const double DEFAULT_ROTATION = 0.0;
  public:
@@ -1487,6 +1613,59 @@ class CInstance: public CEntity
   bool m_Spin; //default = false;
 };
 
+class CModuleInstance: public CEntity
+{
+ public:
+  CModuleInstance(const CModuleInstance& instance);
+  CModuleInstance(void);
+  virtual ~CModuleInstance(void);
+ public:
+  virtual void operator =(const CModuleInstance& instance);
+  virtual void clear(void);
+  virtual void assign(const CModuleInstance& instance);
+  virtual void scale(const double factor);
+  virtual void show(std::ostream& out, const int level = 0);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
+ public:
+  static const double DEFAULT_ROTATION = 0.0;
+  static const double DEFAULT_OFFSET = 0;
+ public:
+  // getters
+  QString name(void) { return m_Name; }
+  QString module(void) { return m_Module; }
+  QString moduleVariant(void) { return m_ModuleVariant; }
+  TCoord x(void) { return m_X; }
+  TCoord y(void) { return m_Y; }
+  int offset(void) { return m_Offset; }
+  bool smashed(void) { return m_Smashed; }
+  double rotation(void) { return m_Rotation; } // default = 0, valid 0,90,180,270
+  bool reflection(void) { return m_Reflection; }
+  bool spin(void) { return m_Spin; }
+  // setters
+  void setName(const QString& value) { m_Name = value; }
+  void setModule(const QString& value) { m_Module = value; }
+  void setModuleVariant(const QString& value) { m_ModuleVariant = value; }
+  void setX(const TCoord value) { m_X = value; }
+  void setY(const TCoord value) { m_Y = value; }
+  void setOffset(const int value) { m_Offset = value; }
+  void setSmashed(const bool value) { m_Smashed = value; }
+  void setRotation(const double value);
+  void setReflection(const bool value) { m_Reflection = value; }
+  void setSpin(const bool value) { m_Spin = value; }
+ protected:
+  QString m_Name; // required
+  QString m_Module; // required
+  QString m_ModuleVariant;
+  TCoord m_X; // required
+  TCoord m_Y; // required
+  int m_Offset; // required
+  bool m_Smashed; // default = false;
+  double m_Rotation; // default = 0, valid 0,90,180,270
+  bool m_Reflection; //default = false;
+  bool m_Spin; //default = false;
+};
+
 class CPart: public CEntity
 {
  public:
@@ -1499,8 +1678,8 @@ class CPart: public CEntity
   virtual void assign(const CPart& part);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   // getters
   QList<CAttribute*>& attributes(void) { return m_Attributes; }
@@ -1549,8 +1728,8 @@ class CPolygon: public CEntity
   virtual void assign(const CPolygon& polygon);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   static const CPolygon::Pour DEFAULT_POUR = CPolygon::ppSolid;
   static const int DEFAULT_RANK = 0;
@@ -1598,8 +1777,8 @@ class CElement: public CEntity
   virtual void assign(const CElement& element);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   static const double DEFAULT_ROTATION = 0.0;
  public:
@@ -1616,6 +1795,7 @@ class CElement: public CEntity
   bool smashed(void) { return m_Smashed; }
   double rotation(void) { return m_Rotation; }
   bool reflection(void) { return m_Reflection; }
+  bool populate(void) { return m_Populate; }
   // setters
   void setName(const QString& value) { m_Name = value; }
   void setLibrary(const QString& value) { m_Library = value; }
@@ -1627,6 +1807,7 @@ class CElement: public CEntity
   void setSmashed(const bool value) { m_Smashed = value; }
   void setRotation(const double value) { m_Rotation = std::min(std::max(value,0.0),359.999); }
   void setReflection(const bool value) { m_Reflection; }
+  void setPopulate(const bool value) { m_Populate; }
  protected:
   QList<CAttribute*> m_Attributes;
   QList<CVariant*> m_Variants;
@@ -1640,6 +1821,7 @@ class CElement: public CEntity
   bool m_Smashed; // default = false
   double m_Rotation; // default = 0, valid 0 .. 359.9(9)
   bool m_Reflection; // default = false;
+  bool m_Populate; // default = yes; since 7.0
 };
 
 // high level objects
@@ -1656,8 +1838,8 @@ class CSignal: public CEntity
   virtual void assign(const CSignal& signal);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   static const int DEFAULT_CLASS = 0;
  public:
@@ -1693,15 +1875,17 @@ class CSegment: public CEntity
   virtual void assign(const CSegment& segment);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   QList<CPinRef*>& pinRefs(void) { return m_PinRefs; }
+  QList<CPortRef*>& portRefs(void) { return m_PortRefs; }
   QList<CWire*>& wires(void) { return m_Wires; }
   QList<CJunction*>& junctions(void) { return m_Junctions; }
   QList<CLabel*>& labels(void) { return m_Labels; }
  protected:
   QList<CPinRef*> m_PinRefs; // only in <net> context
+  QList<CPortRef*> m_PortRefs; // since 7.0
   QList<CWire*> m_Wires;
   QList<CJunction*> m_Junctions; // only in <net> context
   QList<CLabel*> m_Labels;
@@ -1719,8 +1903,8 @@ class CNet: public CEntity
   virtual void assign(const CNet& net);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   static const int DEFAULT_CLASS = 0;
  public:
@@ -1747,8 +1931,8 @@ class CBus: public CEntity
   virtual void assign(const CBus& bus);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   QList<CSegment*>& segments(void) { return m_Segments; }
   QString name(void) { return m_Name; }
@@ -1771,8 +1955,8 @@ class CDevice: public CEntity
   virtual void assign(const CDevice& device);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   QList<CConnect*>& connects(void) { return m_Connects; }
   QList<CTechnology*>& technologies(void) { return m_Technologies; }
@@ -1800,8 +1984,8 @@ class CDeviceSet: public CEntity
   virtual void assign(const CDeviceSet& deviceSet);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   CDescription& description(void) { return m_Description; }
   QList<CGate*>& gates(void) { return m_Gates; }
@@ -1837,8 +2021,8 @@ class CSymbol: public CEntity
   virtual void assign(const CSymbol& symbol);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   // getters
   CDescription& description(void) { return m_Description; }
@@ -1878,8 +2062,8 @@ class CPackage: public CEntity
   virtual void assign(const CPackage& package);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   // getters
   CDescription& description(void) { return m_Description; }
@@ -1923,8 +2107,8 @@ class CPlain: public CEntity
   virtual void assign(const CPlain& plain);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   QList<CPolygon*>& polygons(void) { return m_Polygons; }
   QList<CWire*>& wires(void) { return m_Wires; }
@@ -1957,18 +2141,20 @@ class CSheet: public CEntity
   virtual void assign(const CSheet& sheet);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   CDescription& description(void) { return m_Description; }
   CPlain& plain(void) { return m_Plain; }
   QList<CInstance*>& instances(void) { return m_Instances; }
+  QList<CModuleInstance*>& moduleInstances(void) { return m_ModuleInstances; }
   QList<CBus*>& busses(void) { return m_Busses; }
   QList<CNet*>& nets(void) { return m_Nets; }
  protected:
   CDescription m_Description;
   CPlain m_Plain;
   QList<CInstance*> m_Instances;
+  QList<CModuleInstance*> m_ModuleInstances; // since 7.0
   QList<CBus*> m_Busses;
   QList<CNet*> m_Nets;
 };
@@ -1989,8 +2175,8 @@ class CLibrary: public CEntity
   virtual void scaleSymbols(const double factor);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   CDescription& description(void) { return m_Description; }
   QList<CPackage*>& packages(void) { return m_Packages; }
@@ -2021,8 +2207,8 @@ class CBoard: public CEntity
   virtual void assign(const CBoard& board);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   CDescription& description(void) { return m_Description; }
   CPlain& plain(void) { return m_Plain; }
@@ -2050,6 +2236,45 @@ class CBoard: public CEntity
   QList<CElement*> m_Elements;
   QList<CSignal*> m_Signals;
   QList<CApproved*> m_Errors;
+  TDimension m_LimitedWidth; // since 7.4
+};
+
+class CModule: public CEntity
+{
+ public:
+  CModule(const CModule& module);
+  CModule(void);
+  virtual ~CModule(void);
+ public:
+  virtual void operator =(const CModule& module);
+  virtual void clear(void);
+  virtual void assign(const CModule& module);
+  virtual void scale(const double factor);
+  virtual void show(std::ostream& out, const int level = 0);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
+ public:
+  QString& name(void) { return m_Name; }
+  QString& prefix(void) { return m_Prefix; }
+  TCoord& dx(void) { return m_DX; }
+  TCoord& dy(void) { return m_DY; }
+  CDescription& description(void) { return m_Description; }
+  QList<CPort*>& ports(void) { return m_Ports; }
+  QList<CVariantDef*>& variantDefs(void) { return m_VariantDefs; }
+  QList<CPart*>& parts(void) { return m_Parts; }
+  QList<CSheet*>& sheets(void) { return m_Sheets; }
+ public:
+  CPart *findPartByName(const QString& name);
+ protected:
+  QString m_Name;
+  QString m_Prefix;
+  TCoord m_DX;
+  TCoord m_DY;
+  CDescription m_Description;
+  QList<CPort*> m_Ports;
+  QList<CVariantDef*> m_VariantDefs;
+  QList<CPart*> m_Parts;
+  QList<CSheet*> m_Sheets;
 };
 
 class CSchematic: public CEntity
@@ -2065,14 +2290,15 @@ class CSchematic: public CEntity
   virtual void scale(const double factor);
   virtual void scalePackages(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   CDescription& description(void) { return m_Description; }
   QList<CLibrary*>& libraries(void) { return m_Libraries; }
   QList<CAttribute*>& attributes(void) { return m_Attributes; }
   QList<CVariantDef*>& variantDefs(void) { return m_VariantDefs; }
   QList<CClass*>& classes(void) { return m_Classes; }
+  QList<CModule*>& modules(void) { return m_Modules; }
   QList<CPart*>& parts(void) { return m_Parts; }
   QList<CSheet*>& sheets(void) { return m_Sheets; }
   QList<CApproved*>& errors(void) { return m_Errors; }
@@ -2087,6 +2313,7 @@ class CSchematic: public CEntity
   QList<CAttribute*> m_Attributes;
   QList<CVariantDef*> m_VariantDefs;
   QList<CClass*> m_Classes;
+  QList<CModule*> m_Modules; // since 7.0
   QList<CPart*> m_Parts;
   QList<CSheet*> m_Sheets;
   QList<CApproved*> m_Errors;
@@ -2110,8 +2337,8 @@ class CDrawing: public CEntity
   CLayer *findLayerByID(const TLayer layer);
   virtual void scale(const double factor);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement &root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement &root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   CSettings& settings(void) { return m_Settings; }
   CGrid& grid(void) { return m_Grid; }
@@ -2146,8 +2373,8 @@ class CNote: public CEntity
   virtual void clear(void);
   virtual void assign(const CNote& note);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement &root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement &root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   // getters
   QString note(void) { return m_Note; }
@@ -2172,8 +2399,8 @@ class CCompatibility: public CEntity
   virtual void clear(void);
   virtual void assign(const CCompatibility& compatibility);
   virtual void show(std::ostream& out, const int level = 0);
-  virtual bool readFromXML(const QDomElement &root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement &root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   QList<CNote*>& notes(void) { return m_Notes; }
  protected:
@@ -2194,14 +2421,14 @@ class CEagleDocument: public CEntity
   bool loadFromFile(const QString& fileName);
   bool saveToFile(const QString& fileName);
  //protected:
-  virtual bool readFromXML(const QDomElement& root);
-  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const bool defaults = false);
+  virtual bool readFromXML(const QDomElement& root, const CEagleDocumentOptions& options);
+  virtual bool writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options);
  public:
   // getters
   CCompatibility& preNotes(void) { return m_PreNotes; }
   CDrawing& drawing(void) { return m_Drawing; }
   CCompatibility& postNotes(void) { return m_PostNotes; }
-  double version(void) const { return m_Version; }
+  CVersionNumber& version(void) { return m_Version; }
   //
   bool verifyDocType(void) const { return m_VerifyDocType; }
   int indentation(void) const { return m_Indentation; }
@@ -2216,7 +2443,7 @@ class CEagleDocument: public CEntity
   CCompatibility m_PreNotes;
   CDrawing m_Drawing;
   CCompatibility m_PostNotes;
-  double m_Version; // required, V.RR
+  CVersionNumber m_Version; // required, V.RR
   //
   bool m_VerifyDocType;
   int m_Indentation;

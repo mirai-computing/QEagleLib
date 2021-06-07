@@ -1,6 +1,6 @@
 /*
     QEagleLib * Qt based library for managing Eagle CAD XML files
-    Copyright (C) 2012-2017 Mirai Computing (mirai.computing@gmail.com)
+    Copyright (C) 2012-2021 Mirai Computing (mirai.computing@gmail.com)
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -92,6 +92,140 @@ QString encodeTransformation(const double rotation, const bool reflection, const
  return result;
 }
 
+QString encodeExtent(const int startLayer, const int stopLayer)
+{
+ return QString("%1-%2").arg(std::min(startLayer,stopLayer)).arg(std::max(startLayer,stopLayer));
+}
+
+void decodeExtent(const QString& value, int& startLayer, int& stopLayer)
+{
+ QStringList l = value.split("-",QString::SkipEmptyParts,Qt::CaseSensitive);
+ startLayer = l.first().toInt();
+ stopLayer = l.last().toInt();
+}
+
+//------------------------------------------------------------------------------
+
+CVersionNumber::CVersionNumber()
+{
+ assign(0,0);
+}
+
+CVersionNumber::CVersionNumber(const CVersionNumber& version)
+{
+ assign(version);
+}
+
+CVersionNumber::CVersionNumber(const unsigned int major, const unsigned int minor)
+{
+ assign(major,minor);
+}
+
+CVersionNumber::CVersionNumber(const QString& str)
+{
+ assign(str);
+}
+
+CVersionNumber::~CVersionNumber()
+{
+ //
+}
+
+void CVersionNumber::assign(const CVersionNumber& version)
+{
+ m_Major = version.m_Major;
+ m_Minor = version.m_Minor;
+}
+
+void CVersionNumber::assign(const unsigned int major, const unsigned int minor)
+{
+ m_Major = major; m_Minor = minor;
+}
+
+void CVersionNumber::assign(const QString& str)
+{
+ QStringList l = str.split('.');
+ if (l.size()>0) { m_Major = l[0].toUInt(); m_Minor = 0; }
+ if (l.size()>1) { m_Minor = l[1].toUInt(); }
+}
+
+QString CVersionNumber::toString(void) const
+{
+ //return QString("%1.%2").arg(m_Major).arg(QString::number(m_Minor).rightJustified(m_MinorDigits, '0'));
+ return QString("%1.%2").arg(m_Major).arg(m_Minor);
+}
+
+bool CVersionNumber::operator ==(const CVersionNumber& version)
+{
+ return (m_Major==version.m_Major && m_Minor==version.m_Minor);
+}
+
+bool CVersionNumber::operator !=(const CVersionNumber& version)
+{
+ return (m_Major!=version.m_Major || m_Minor!=version.m_Minor);
+}
+
+bool CVersionNumber::operator >=(const CVersionNumber& version)
+{
+ return ((m_Major>version.m_Major) ||
+        (m_Major==version.m_Major && m_Minor>=version.m_Minor));
+}
+
+bool CVersionNumber::operator <=(const CVersionNumber& version)
+{
+ return ((m_Major<version.m_Major) ||
+        (m_Major==version.m_Major && m_Minor<=version.m_Minor));
+}
+
+bool CVersionNumber::operator >(const CVersionNumber& version)
+{
+ return ((m_Major>version.m_Major) ||
+        (m_Major==version.m_Major && m_Minor>version.m_Minor));
+}
+
+bool CVersionNumber::operator <(const CVersionNumber& version)
+{
+ return ((m_Major<version.m_Major) ||
+        (m_Major==version.m_Major && m_Minor<version.m_Minor));
+}
+
+CVersionNumber& CVersionNumber::operator =(const CVersionNumber& version)
+{
+ assign(version);
+ return *this;
+}
+
+//------------------------------------------------------------------------------
+
+CEagleDocumentOptions::CEagleDocumentOptions(const CEagleDocumentOptions& options)
+{
+ m_WriteDefaults = options.m_WriteDefaults;
+ m_Version = options.m_Version;
+}
+
+CEagleDocumentOptions::CEagleDocumentOptions(void)
+{
+ m_WriteDefaults = false;
+ m_Version = QString((const char*)STRING(EAGLE_DTD_VERSION));
+}
+
+CEagleDocumentOptions::~CEagleDocumentOptions(void)
+{
+ //
+}
+
+void CEagleDocumentOptions::setWriteDefaults(const bool value)
+{
+ m_WriteDefaults = value;
+}
+
+void CEagleDocumentOptions::setVersion(const CVersionNumber& value)
+{
+ m_Version = value;
+}
+
+//------------------------------------------------------------------------------
+
 CEntity::CEntity(void)
 {
  clear();
@@ -117,12 +251,12 @@ void CEntity::show(std::ostream& out, const int level)
  for (int i = 0; i < level; i++)  out<<"\t";
 }
 
-bool CEntity::readFromXML(const QDomElement& root)
+bool CEntity::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  return true;
 }
 
-bool CEntity::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CEntity::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  return (!host.isNull() && !root.isNull());
 }
@@ -178,7 +312,7 @@ void CSettings::show(std::ostream& out, const int level)
     <<", VerticalText="<<toString(m_VerticalText).toUtf8().data()<<"}"<<std::endl;
 }
 
-bool CSettings::readFromXML(const QDomElement& root)
+bool CSettings::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  int result = 0;
  QDomElement e = root.firstChildElement("setting");
@@ -201,7 +335,7 @@ bool CSettings::readFromXML(const QDomElement& root)
  return (result==0x3);
 }
 
-bool CSettings::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CSettings::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -209,7 +343,7 @@ bool CSettings::writeToXML(QDomDocument& host, QDomElement& root, const bool def
   QDomElement c = host.createElement("setting");
   c.setAttribute("alwaysvectorfont",CEntity::toString(m_AlwaysVectorFont));
   e.appendChild(c);
-  if (defaults || CSettings::vtUp!=m_VerticalText)
+  if (options.writeDefaults() || CSettings::vtUp!=m_VerticalText)
   {
    c = host.createElement("setting");
    c.setAttribute("verticaltext",toString(m_VerticalText));
@@ -310,7 +444,7 @@ void CGrid::show(std::ostream& out, const int level)
     <<"}"<<std::endl;
 }
 
-bool CGrid::readFromXML(const QDomElement& root)
+bool CGrid::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  int result = 0;
  QDomElement e = root;
@@ -378,7 +512,7 @@ bool CGrid::readFromXML(const QDomElement& root)
  return (result==0x1ff);
 }
 
-bool CGrid::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CGrid::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -386,15 +520,15 @@ bool CGrid::writeToXML(QDomDocument& host, QDomElement& root, const bool default
   e.setAttribute("distance",QString("%1").arg(m_Distance));
   e.setAttribute("unitdist",toString(m_UnitDist));
   e.setAttribute("unit",toString(m_Unit));
-  if (defaults || CGrid::gsLines!=m_Style)
+  if (options.writeDefaults() || CGrid::gsLines!=m_Style)
   {
    e.setAttribute("style",toString(m_Style));
   }
-  if (defaults || 1!=m_Multiple)
+  if (options.writeDefaults() || 1!=m_Multiple)
   {
    e.setAttribute("multiple",QString("%1").arg(m_Multiple));
   }
-  if (defaults || false!=m_Display)
+  if (options.writeDefaults() || false!=m_Display)
   {
    e.setAttribute("display",CEntity::toString(m_Display));
   }
@@ -500,6 +634,7 @@ QString CLayer::layerName(const TLayer layer)
   case LAYER_REFERENCE: return "Reference";
   case LAYER_TDOCU:     return "tDocu";
   case LAYER_BDOCU:     return "bDocu";
+  case LAYER_MODULES:   return "Modules";
   case LAYER_NETS:      return "Nets";
   case LAYER_BUSSES:    return "Busses";
   case LAYER_PINS:      return "Pins";
@@ -559,7 +694,7 @@ void CLayer::show(std::ostream& out, const int level)
     <<"}"<<std::endl;
 }
 
-bool CLayer::readFromXML(const QDomElement& root)
+bool CLayer::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  int result = 0;
  QDomElement e = root;
@@ -619,7 +754,7 @@ bool CLayer::readFromXML(const QDomElement& root)
  return (result==0x3f);
 }
 
-bool CLayer::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CLayer::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -628,11 +763,11 @@ bool CLayer::writeToXML(QDomDocument& host, QDomElement& root, const bool defaul
   e.setAttribute("name",m_Name);
   e.setAttribute("color",QString("%1").arg(m_Color));
   e.setAttribute("fill",QString("%1").arg(m_Fill));
-  if (defaults || !m_Visible)
+  //if (options.writeDefaults() || !m_Visible)
   {
    e.setAttribute("visible",CEntity::toString(m_Visible));
   }
-  if (defaults || !m_Active)
+  //if (options.writeDefaults() || !m_Active)
   {
    e.setAttribute("active",CEntity::toString(m_Active));
   }
@@ -682,7 +817,7 @@ void CClearance::show(std::ostream& out, const int level)
  out<<"Clearance:{Class="<<m_Class<<", Value="<<m_Value<<"}"<<std::endl;
 }
 
-bool CClearance::readFromXML(const QDomElement& root)
+bool CClearance::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="clearance") e = e.nextSiblingElement("clearance");
@@ -707,13 +842,13 @@ bool CClearance::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CClearance::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CClearance::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
   QDomElement e = host.createElement("clearance");
   e.setAttribute("class",QString("%1").arg(m_Class));
-  if (defaults || 0.0!=m_Value)
+  if (options.writeDefaults() || 0.0!=m_Value)
   {
    e.setAttribute("value",QString("%1").arg(m_Value));
   }
@@ -764,7 +899,7 @@ void CDescription::show(std::ostream& out, const int level)
     <<m_Description.toUtf8().data()<<"} }"<<std::endl;
 }
 
-bool CDescription::readFromXML(const QDomElement& root)
+bool CDescription::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="description") e = e.nextSiblingElement("description");
@@ -790,14 +925,14 @@ bool CDescription::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CDescription::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CDescription::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
   if (!m_Description.isEmpty())
   {
    QDomElement e = host.createElement("description");
-   if (defaults || !(m_Language=="en"))
+   if (options.writeDefaults() || !(m_Language=="en"))
    {
     e.setAttribute("language",m_Language);
    }
@@ -851,7 +986,7 @@ void CParam::show(std::ostream& out, const int level)
     <<"', Value='"<<m_Value.toUtf8().data()<<"'}"<<std::endl;
 }
 
-bool CParam::readFromXML(const QDomElement& root)
+bool CParam::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="param") e = e.nextSiblingElement("param");
@@ -872,7 +1007,7 @@ bool CParam::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CParam::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CParam::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -923,7 +1058,7 @@ void CApproved::show(std::ostream& out, const int level)
  out<<"Approved:{Hash='"<<m_Hash.toUtf8().data()<<"'}"<<std::endl;
 }
 
-bool CApproved::readFromXML(const QDomElement& root)
+bool CApproved::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="approved") e = e.nextSiblingElement("approved");
@@ -939,7 +1074,7 @@ bool CApproved::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CApproved::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CApproved::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -1010,7 +1145,7 @@ void CPass::show(std::ostream& out, const int level)
  CEntity::show(out,level); out<<"}"<<std::endl;
 }
 
-bool CPass::readFromXML(const QDomElement& root)
+bool CPass::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="pass") e = e.nextSiblingElement("pass");
@@ -1021,7 +1156,7 @@ bool CPass::readFromXML(const QDomElement& root)
   {
    CParam *p = new CParam();
    m_Params.append(p);
-   p->readFromXML(c);
+   p->readFromXML(c,options);
    c = c.nextSiblingElement("param");
   }
   QString s = e.attribute("name");
@@ -1045,7 +1180,7 @@ bool CPass::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CPass::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CPass::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -1053,11 +1188,11 @@ bool CPass::writeToXML(QDomDocument& host, QDomElement& root, const bool default
   //QDomElement c = host.createElement("params");
   for (int i = 0; i < m_Params.size(); i++)
   {
-   m_Params[i]->writeToXML(host,e,defaults);
+   m_Params[i]->writeToXML(host,e,options);
   }
   e.setAttribute("name",m_Name);
   e.setAttribute("refer",m_Refer);
-  if (defaults || !m_Active)
+  if (options.writeDefaults() || !m_Active)
   {
    e.setAttribute("active",CEntity::toString(m_Active));
   }
@@ -1132,7 +1267,7 @@ void CClass::show(std::ostream& out, const int level)
  CEntity::show(out,level); out<<"}"<<std::endl;
 }
 
-bool CClass::readFromXML(const QDomElement& root)
+bool CClass::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="class") e = e.nextSiblingElement("class");
@@ -1143,7 +1278,7 @@ bool CClass::readFromXML(const QDomElement& root)
   {
    CClearance *l = new CClearance();
    m_Clearances.append(l);
-   l->readFromXML(c);
+   l->readFromXML(c,options);
    c = c.nextSiblingElement("clearance");
   }
   QString s = e.attribute("number");
@@ -1177,18 +1312,18 @@ bool CClass::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CClass::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CClass::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
   QDomElement e = host.createElement("class");
   e.setAttribute("number",QString("%1").arg(m_Number));
   e.setAttribute("name",m_Name);
-  if (defaults || 0.0!=m_Width)
+  if (options.writeDefaults() || 0.0!=m_Width)
   {
    e.setAttribute("width",QString("%1").arg(m_Width));
   }
-  if (defaults || 0.0!=m_Drill)
+  if (options.writeDefaults() || 0.0!=m_Drill)
   {
    e.setAttribute("drill",QString("%1").arg(m_Drill));
   }
@@ -1196,7 +1331,7 @@ bool CClass::writeToXML(QDomDocument& host, QDomElement& root, const bool defaul
   for (int i = 0; i < m_Clearances.size(); i++)
   {
    //QDomElement c = host.createElement("clearance");
-   m_Clearances[i]->writeToXML(host,e,defaults);
+   m_Clearances[i]->writeToXML(host,e,options);
    //e.appendChild(c);
   }
   return true;
@@ -1279,7 +1414,7 @@ void CDesignRule::show(std::ostream& out, const int level)
  CEntity::show(out,level); out<<"}"<<std::endl;
 }
 
-bool CDesignRule::readFromXML(const QDomElement& root)
+bool CDesignRule::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="designrules") e = e.nextSiblingElement("designrules");
@@ -1290,7 +1425,7 @@ bool CDesignRule::readFromXML(const QDomElement& root)
   {
    CDescription *d = new CDescription();
    m_Descriptions.append(d);
-   d->readFromXML(c);
+   d->readFromXML(c,options);
    c = c.nextSiblingElement("description");
   }
   c = e.firstChildElement("param");
@@ -1298,7 +1433,7 @@ bool CDesignRule::readFromXML(const QDomElement& root)
   {
    CParam *p = new CParam();
    m_Params.append(p);
-   p->readFromXML(c);
+   p->readFromXML(c,options);
    c = c.nextSiblingElement("param");
   }
   QString s = e.attribute("name");
@@ -1311,7 +1446,7 @@ bool CDesignRule::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CDesignRule::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CDesignRule::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -1319,13 +1454,13 @@ bool CDesignRule::writeToXML(QDomDocument& host, QDomElement& root, const bool d
   for (int i = 0; i < m_Descriptions.size(); i++)
   {
    //QDomElement e = host.createElement("description");
-   m_Descriptions[i]->writeToXML(host,root,defaults);
+   m_Descriptions[i]->writeToXML(host,root,options);
    //root.appendChild(e);
   }
   for (int i = 0; i < m_Params.size(); i++)
   {
    //QDomElement e = host.createElement("param");
-   m_Params[i]->writeToXML(host,root,defaults);
+   m_Params[i]->writeToXML(host,root,options);
    //root.appendChild(e);
   }
   return true;
@@ -1374,7 +1509,7 @@ void CVariantDef::show(std::ostream& out, const int level)
     <<"', Current"<<CEntity::toString(m_Current).toUtf8().data()<<"}"<<std::endl;
 }
 
-bool CVariantDef::readFromXML(const QDomElement& root)
+bool CVariantDef::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="designrule") e = e.nextSiblingElement("designrule");
@@ -1396,13 +1531,13 @@ bool CVariantDef::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CVariantDef::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CVariantDef::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
   QDomElement e = host.createElement("variantdef");
   e.setAttribute("name",m_Name);
-  if (defaults || m_Current)
+  if (options.writeDefaults() || m_Current)
   {
    e.setAttribute("current",CEntity::toString(m_Current));
   }
@@ -1460,7 +1595,7 @@ void CVariant::show(std::ostream& out, const int level)
     <<"'}"<<std::endl;
 }
 
-bool CVariant::readFromXML(const QDomElement& root)
+bool CVariant::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="variant") e = e.nextSiblingElement("variant");
@@ -1492,13 +1627,13 @@ bool CVariant::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CVariant::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CVariant::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
   QDomElement e = host.createElement("variant");
   e.setAttribute("name",m_Name);
-  if (defaults || !m_Populate)
+  if (options.writeDefaults() || !m_Populate)
   {
    e.setAttribute("populate",CEntity::toString(m_Populate));
   }
@@ -1591,7 +1726,7 @@ void CGate::show(std::ostream& out, const int level)
     <<"}"<<std::endl;
 }
 
-bool CGate::readFromXML(const QDomElement& root)
+bool CGate::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="gate") e = e.nextSiblingElement("gate");
@@ -1642,7 +1777,7 @@ bool CGate::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CGate::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CGate::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -1651,11 +1786,11 @@ bool CGate::writeToXML(QDomDocument& host, QDomElement& root, const bool default
   e.setAttribute("symbol",m_Symbol);
   e.setAttribute("x",QString("%1").arg(m_X));
   e.setAttribute("y",QString("%1").arg(m_Y));
-  if (defaults || CGate::alNext!=m_AddLevel)
+  if (options.writeDefaults() || CGate::alNext!=m_AddLevel)
   {
    e.setAttribute("addlevel",toString(m_AddLevel));
   }
-  if (defaults || 0!=m_SwapLevel)
+  if (options.writeDefaults() || 0!=m_SwapLevel)
   {
    e.setAttribute("swaplevel",QString("%1").arg(m_SwapLevel));
   }
@@ -1791,7 +1926,7 @@ void CWire::show(std::ostream& out, const int level)
     <<"}"<<std::endl;
 }
 
-bool CWire::readFromXML(const QDomElement& root)
+bool CWire::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="wire") e = e.nextSiblingElement("wire");
@@ -1865,7 +2000,7 @@ bool CWire::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CWire::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CWire::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -1880,15 +2015,15 @@ bool CWire::writeToXML(QDomDocument& host, QDomElement& root, const bool default
   {
    e.setAttribute("extent",m_Extent);
   }
-  if (defaults || CWire::wsContinuous!=m_Style)
+  if (options.writeDefaults() || CWire::wsContinuous!=m_Style)
   {
    e.setAttribute("style",toString(m_Style));
   }
-  if (defaults || 0.0!=m_Curve)
+  if (options.writeDefaults() || 0.0!=m_Curve)
   {
    e.setAttribute("curve",QString("%1").arg(m_Curve));
   }
-  if (defaults || CWire::wcRound!=m_Cap)
+  if (options.writeDefaults() || CWire::wcRound!=m_Cap)
   {
    e.setAttribute("cap",toString(m_Cap));
   }
@@ -2007,7 +2142,7 @@ void CDimension::show(std::ostream& out, const int level)
     <<"}"<<std::endl;
 }
 
-bool CDimension::readFromXML(const QDomElement& root)
+bool CDimension::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="dimension") e = e.nextSiblingElement("dimension");
@@ -2139,7 +2274,7 @@ bool CDimension::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CDimension::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CDimension::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -2151,33 +2286,33 @@ bool CDimension::writeToXML(QDomDocument& host, QDomElement& root, const bool de
   e.setAttribute("x3",QString("%1").arg(m_X3));
   e.setAttribute("y3",QString("%1").arg(m_Y3));
   e.setAttribute("layer",QString("%1").arg(m_Layer));
-  if (defaults || CDimension::dtParallel!=m_DType)
+  if (options.writeDefaults() || CDimension::dtParallel!=m_DType)
   {
    e.setAttribute("dtype",toString(m_DType));
   }
   e.setAttribute("width",QString("%1").arg(m_Width));
-  if (defaults || DEFAULT_EXT_WIDTH!=m_ExtWidth)
+  if (options.writeDefaults() || DEFAULT_EXT_WIDTH!=m_ExtWidth)
   {
    e.setAttribute("extwidth",QString("%1").arg(m_ExtWidth));
   }
-  if (defaults || DEFAULT_EXT_LENGTH!=m_ExtLength)
+  if (options.writeDefaults() || DEFAULT_EXT_LENGTH!=m_ExtLength)
   {
    e.setAttribute("extlength",QString("%1").arg(m_ExtLength));
   }
-  if (defaults || DEFAULT_EXT_OFFSET!=m_ExtOffset)
+  if (options.writeDefaults() || DEFAULT_EXT_OFFSET!=m_ExtOffset)
   {
    e.setAttribute("extoffset",QString("%1").arg(m_ExtOffset));
   }
   e.setAttribute("textsize",QString("%1").arg(m_TextSize));
-  if (defaults || DEFAULT_GRID_UNIT!=m_GridUnit)
+  if (options.writeDefaults() || DEFAULT_GRID_UNIT!=m_GridUnit)
   {
    e.setAttribute("unit",CGrid::toString(m_GridUnit));
   }
-  if (defaults || DEFAULT_PRECISION!=m_Precision)
+  if (options.writeDefaults() || DEFAULT_PRECISION!=m_Precision)
   {
    e.setAttribute("precision",QString("%1").arg(m_Precision));
   }
-  if (defaults || m_Visible)
+  if (options.writeDefaults() || m_Visible)
   {
    e.setAttribute("visible",CEntity::toString(m_Visible));
   }
@@ -2321,7 +2456,7 @@ void CText::show(std::ostream& out, const int level)
  CEntity::show(out,level); out<<"}"<<std::endl;
 }
 
-bool CText::readFromXML(const QDomElement& root)
+bool CText::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="text") e = e.nextSiblingElement("text");
@@ -2405,7 +2540,7 @@ bool CText::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CText::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CText::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -2414,24 +2549,24 @@ bool CText::writeToXML(QDomDocument& host, QDomElement& root, const bool default
   e.setAttribute("y",QString("%1").arg(m_Y));
   e.setAttribute("size",QString("%1").arg(m_Size));
   e.setAttribute("layer",QString("%1").arg(m_Layer));
-  if (defaults || CText::DEFAULT_FONT!=m_Font)
+  if (options.writeDefaults() || CText::DEFAULT_FONT!=m_Font)
   {
    e.setAttribute("font",toString(m_Font));
   }
-  if (defaults || CText::DEFAULT_RATIO!=m_Ratio)
+  if (options.writeDefaults() || CText::DEFAULT_RATIO!=m_Ratio)
   {
    e.setAttribute("ratio",QString("%1").arg(m_Ratio));
   }
-  if (defaults || CText::DEFAULT_ROTATION!=m_Rotation || m_Reflection || m_Spin)
+  if (options.writeDefaults() || CText::DEFAULT_ROTATION!=m_Rotation || m_Reflection || m_Spin)
   {
    //e.setAttribute("rot",QString("R%1").arg(m_Rotation));
    e.setAttribute("rot",encodeTransformation(m_Rotation,m_Reflection,m_Spin));
   }
-  if (defaults || CText::taBottomLeft!=m_Align)
+  if (options.writeDefaults() || CText::taBottomLeft!=m_Align)
   {
    e.setAttribute("align",toString(m_Align));
   }
-  if (defaults || CText::DEFAULT_DISTANCE!=m_Distance)
+  if (options.writeDefaults() || CText::DEFAULT_DISTANCE!=m_Distance)
   {
    e.setAttribute("distance",QString("%1").arg(m_Distance));
   }
@@ -2444,6 +2579,12 @@ bool CText::writeToXML(QDomDocument& host, QDomElement& root, const bool default
 }
 
 //------------------------------------------------------------------------------
+
+CCircle::CCircle(const TCoord x, const TCoord y, const TCoord radius,
+ const TDimension width, const TLayer layer)
+{
+ m_X = x; m_Y = y; m_Radius = radius; m_Width = width; m_Layer = layer;
+}
 
 CCircle::CCircle(const CCircle& circle)
 {
@@ -2498,7 +2639,7 @@ void CCircle::show(std::ostream& out, const int level)
     <<", Layer="<<m_Layer<<"}"<<std::endl;
 }
 
-bool CCircle::readFromXML(const QDomElement& root)
+bool CCircle::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="circle") e = e.nextSiblingElement("circle");
@@ -2544,7 +2685,7 @@ bool CCircle::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CCircle::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CCircle::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -2562,8 +2703,16 @@ bool CCircle::writeToXML(QDomDocument& host, QDomElement& root, const bool defau
 
 //------------------------------------------------------------------------------
 
+CRectangle::CRectangle(const TCoord x1, const TCoord y1, const TCoord x2, const TCoord y2,
+ const TLayer layer, const double rotation)
+{
+ m_X1 = x1; m_Y1 = y1; m_X2 = x2; m_Y2 = y2;
+ m_Layer = layer; m_Rotation = rotation;
+}
+
 CRectangle::CRectangle(const CRectangle& rectangle)
 {
+ assign(rectangle);
 }
 
 CRectangle::CRectangle(void)
@@ -2578,6 +2727,7 @@ CRectangle::~CRectangle(void)
 
 void CRectangle::operator =(const CRectangle& rectangle)
 {
+ assign(rectangle);
 }
 
 void CRectangle::clear(void)
@@ -2615,7 +2765,7 @@ void CRectangle::show(std::ostream& out, const int level)
     <<", Layer="<<m_Layer<<", Rotation="<<m_Rotation<<"}"<<std::endl;
 }
 
-bool CRectangle::readFromXML(const QDomElement& root)
+bool CRectangle::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="rectangle") e = e.nextSiblingElement("rectangle");
@@ -2676,7 +2826,7 @@ bool CRectangle::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CRectangle::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CRectangle::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -2686,7 +2836,7 @@ bool CRectangle::writeToXML(QDomDocument& host, QDomElement& root, const bool de
   e.setAttribute("x2",QString("%1").arg(m_X2));
   e.setAttribute("y2",QString("%1").arg(m_Y2));
   e.setAttribute("layer",QString("%1").arg(m_Layer));
-  if (defaults || DEFAULT_ROTATION!=m_Rotation)
+  if (options.writeDefaults() || DEFAULT_ROTATION!=m_Rotation)
   {
    //e.setAttribute("rot",QString("R%1").arg(m_Rotation));
    e.setAttribute("rot",encodeTransformation(m_Rotation,false,false));
@@ -2769,7 +2919,7 @@ void CFrame::show(std::ostream& out, const int level)
     <<"}"<<std::endl;
 }
 
-bool CFrame::readFromXML(const QDomElement& root)
+bool CFrame::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="frame") e = e.nextSiblingElement("frame");
@@ -2853,7 +3003,7 @@ bool CFrame::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CFrame::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CFrame::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -2865,19 +3015,19 @@ bool CFrame::writeToXML(QDomDocument& host, QDomElement& root, const bool defaul
   e.setAttribute("columns",QString("%1").arg(m_Columns));
   e.setAttribute("rows",QString("%1").arg(m_Rows));
   e.setAttribute("layer",QString("%1").arg(m_Layer));
-  if (defaults || !m_BorderLeft)
+  if (options.writeDefaults() || !m_BorderLeft)
   {
    e.setAttribute("border-left",CEntity::toString(m_BorderLeft));
   }
-  if (defaults || !m_BorderTop)
+  if (options.writeDefaults() || !m_BorderTop)
   {
    e.setAttribute("border-top",CEntity::toString(m_BorderTop));
   }
-  if (defaults || !m_BorderRight)
+  if (options.writeDefaults() || !m_BorderRight)
   {
    e.setAttribute("border-right",CEntity::toString(m_BorderRight));
   }
-  if (defaults || !m_BorderBottom)
+  if (options.writeDefaults() || !m_BorderBottom)
   {
    e.setAttribute("border-bottom",CEntity::toString(m_BorderBottom));
   }
@@ -2888,6 +3038,13 @@ bool CFrame::writeToXML(QDomDocument& host, QDomElement& root, const bool defaul
 }
 
 //------------------------------------------------------------------------------
+
+CHole::CHole(const TCoord x, const TCoord y, const TDimension drill)
+{
+ m_X = x;
+ m_Y = y;
+ m_Drill = drill;
+}
 
 CHole::CHole(const CHole& hole)
 {
@@ -2936,7 +3093,7 @@ void CHole::show(std::ostream& out, const int level)
  out<<"Hole:{X="<<m_X<<", Y="<<m_Y<<", Drill="<<m_Drill<<"}"<<std::endl;
 }
 
-bool CHole::readFromXML(const QDomElement& root)
+bool CHole::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="hole") e = e.nextSiblingElement("hole");
@@ -2968,7 +3125,7 @@ bool CHole::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CHole::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CHole::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -3063,7 +3220,7 @@ void CPad::show(std::ostream& out, const int level)
     <<", First="<<CEntity::toString(m_First).toUtf8().data()<<"}"<<std::endl;
 }
 
-bool CPad::readFromXML(const QDomElement& root)
+bool CPad::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="pad") e = e.nextSiblingElement("pad");
@@ -3149,7 +3306,7 @@ bool CPad::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CPad::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CPad::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -3158,28 +3315,28 @@ bool CPad::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults
   e.setAttribute("x",QString("%1").arg(m_X));
   e.setAttribute("y",QString("%1").arg(m_Y));
   e.setAttribute("drill",QString("%1").arg(m_Drill));
-  if (defaults || CPad::DEFAULT_DIAMETER!=m_Diameter)
+  if (options.writeDefaults() || CPad::DEFAULT_DIAMETER!=m_Diameter)
   {
    e.setAttribute("diameter",QString("%1").arg(m_Diameter));
   }
-  if (defaults || CPad::DEFAULT_SHAPE!=m_Shape)
+  if (options.writeDefaults() || CPad::DEFAULT_SHAPE!=m_Shape)
   {
    e.setAttribute("shape",toString(m_Shape));
   }
-  if (defaults || CPad::DEFAULT_ROTATION!=m_Rotation)
+  if (options.writeDefaults() || CPad::DEFAULT_ROTATION!=m_Rotation)
   {
    //e.setAttribute("rot",QString("R%1").arg(m_Rotation));
    e.setAttribute("rot",encodeTransformation(m_Rotation,false,false));
   }
-  if (defaults || !m_Stop)
+  if (options.writeDefaults() || !m_Stop)
   {
    e.setAttribute("stop",CEntity::toString(m_Stop));
   }
-  if (defaults || !m_Thermals)
+  if (options.writeDefaults() || !m_Thermals)
   {
    e.setAttribute("thermals",CEntity::toString(m_Thermals));
   }
-  if (defaults || m_First)
+  if (options.writeDefaults() || m_First)
   {
    e.setAttribute("first",CEntity::toString(m_First));
   }
@@ -3278,7 +3435,7 @@ void CSMD::show(std::ostream& out, const int level)
     <<", Cream="<<CEntity::toString(m_Cream).toUtf8().data()<<"}"<<std::endl;
 }
 
-bool CSMD::readFromXML(const QDomElement& root)
+bool CSMD::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="smd") e = e.nextSiblingElement("smd");
@@ -3369,7 +3526,7 @@ bool CSMD::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CSMD::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CSMD::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -3380,24 +3537,24 @@ bool CSMD::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults
   e.setAttribute("dx",QString("%1").arg(m_DX));
   e.setAttribute("dy",QString("%1").arg(m_DY));
   e.setAttribute("layer",QString("%1").arg(m_Layer));
-  if (defaults || CSMD::DEFAULT_ROUNDNESS!=m_Roundness)
+  if (options.writeDefaults() || CSMD::DEFAULT_ROUNDNESS!=m_Roundness)
   {
    e.setAttribute("roundness",QString("%1").arg(m_Roundness));
   }
-  if (defaults || CSMD::DEFAULT_ROTATION!=m_Rotation)
+  if (options.writeDefaults() || CSMD::DEFAULT_ROTATION!=m_Rotation)
   {
    //e.setAttribute("rot",QString("R%1").arg(m_Rotation));
    e.setAttribute("rot",encodeTransformation(m_Rotation,false,false));
   }
-  if (defaults || !m_Stop)
+  if (options.writeDefaults() || !m_Stop)
   {
    e.setAttribute("stop",CEntity::toString(m_Stop));
   }
-  if (defaults || !m_Thermals)
+  if (options.writeDefaults() || !m_Thermals)
   {
    e.setAttribute("thermals",CEntity::toString(m_Thermals));
   }
-  if (defaults || m_Cream)
+  if (options.writeDefaults() || m_Cream)
   {
    e.setAttribute("cream",CEntity::toString(m_Cream));
   }
@@ -3412,6 +3569,15 @@ bool CSMD::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults
 CVia::CVia(const CVia& via)
 {
  assign(via);
+}
+
+CVia::CVia(const TCoord x, const TCoord y, const int startLayer,
+ const int stopLayer,  const TDimension drill, const TDimension diameter,
+ const CVia::Shape shape, const bool alwaysStop)
+{
+ m_X = x; m_Y = y; m_Extent = encodeExtent(startLayer, stopLayer);
+ m_Drill = drill; m_Diameter = diameter; m_Shape = shape;
+ m_AlwaysStop = alwaysStop;
 }
 
 CVia::CVia(void)
@@ -3480,7 +3646,7 @@ void CVia::show(std::ostream& out, const int level)
     <<"}"<<std::endl;
 }
 
-bool CVia::readFromXML(const QDomElement& root)
+bool CVia::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="via") e = e.nextSiblingElement("via");
@@ -3537,7 +3703,7 @@ bool CVia::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CVia::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CVia::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -3546,15 +3712,15 @@ bool CVia::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults
   e.setAttribute("y",QString("%1").arg(m_Y));
   e.setAttribute("extent",m_Extent);
   e.setAttribute("drill",QString("%1").arg(m_Drill));
-  if (defaults || CVia::DEFAULT_DIAMETER!=m_Diameter)
+  if (options.writeDefaults() || CVia::DEFAULT_DIAMETER!=m_Diameter)
   {
    e.setAttribute("diameter",QString("%1").arg(m_Diameter));
   }
-  if (defaults || CVia::DEFAULT_SHAPE!=m_Shape)
+  if (options.writeDefaults() || CVia::DEFAULT_SHAPE!=m_Shape)
   {
    e.setAttribute("shape",toString(m_Shape));
   }
-  if (defaults || !m_AlwaysStop)
+  if (options.writeDefaults() || m_AlwaysStop)
   {
    e.setAttribute("alwaysstop",CEntity::toString(m_AlwaysStop));
   }
@@ -3620,7 +3786,7 @@ void CVertex::show(std::ostream& out, const int level)
  out<<"Vertex:{X="<<m_X<<", Y="<<m_Y<<", Curve="<<m_Curve<<"}"<<std::endl;
 }
 
-bool CVertex::readFromXML(const QDomElement& root)
+bool CVertex::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="vertex") e = e.nextSiblingElement("vertex");
@@ -3652,14 +3818,14 @@ bool CVertex::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CVertex::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CVertex::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
   QDomElement e = host.createElement("vertex");
   e.setAttribute("x",QString("%1").arg(m_X));
   e.setAttribute("y",QString("%1").arg(m_Y));
-  if (defaults || CVertex::DEFAULT_CURVE!=m_Curve)
+  if (options.writeDefaults() || CVertex::DEFAULT_CURVE!=m_Curve)
   {
    e.setAttribute("curve",QString("%1").arg(m_Curve));
   }
@@ -3788,7 +3954,7 @@ void CPin::show(std::ostream& out, const int level)
     <<"}"<<std::endl;
 }
 
-bool CPin::readFromXML(const QDomElement& root)
+bool CPin::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="pin") e = e.nextSiblingElement("pin");
@@ -3877,7 +4043,7 @@ bool CPin::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CPin::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CPin::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -3885,31 +4051,166 @@ bool CPin::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults
   e.setAttribute("name",QString("%1").arg(m_Name));
   e.setAttribute("x",QString("%1").arg(m_X));
   e.setAttribute("y",QString("%1").arg(m_Y));
-  if (defaults || CPin::DEFAULT_VISIBLE!=m_Visible)
+  if (options.writeDefaults() || CPin::DEFAULT_VISIBLE!=m_Visible)
   {
    e.setAttribute("visible",toString(m_Visible));
   }
-  if (defaults || CPin::DEFAULT_LENGTH!=m_Length)
+  if (options.writeDefaults() || CPin::DEFAULT_LENGTH!=m_Length)
   {
    e.setAttribute("length",toString(m_Length));
   }
-  if (defaults || CPin::DEFAULT_DIRECTION!=m_Direction)
+  if (options.writeDefaults() || CPin::DEFAULT_DIRECTION!=m_Direction)
   {
    e.setAttribute("direction",toString(m_Direction));
   }
-  if (defaults || CPin::DEFAULT_FUNCTION!=m_Function)
+  if (options.writeDefaults() || CPin::DEFAULT_FUNCTION!=m_Function)
   {
    e.setAttribute("function",toString(m_Function));
   }
-  if (defaults || CPin::DEFAULT_SWAPLEVEL!=m_SwapLevel)
+  if (options.writeDefaults() || CPin::DEFAULT_SWAPLEVEL!=m_SwapLevel)
   {
    e.setAttribute("swaplevel",m_SwapLevel);
   }
-  if (defaults || CPin::DEFAULT_ROTATION!=m_Rotation)
+  if (options.writeDefaults() || CPin::DEFAULT_ROTATION!=m_Rotation)
   {
    //e.setAttribute("rot",QString("R%1").arg(m_Rotation));
    e.setAttribute("rot",encodeTransformation(m_Rotation,false,false));
   }
+  root.appendChild(e);
+  return true;
+ }
+ return false;
+}
+
+//------------------------------------------------------------------------------
+
+CPort::CPort(const CPort& port)
+{
+ assign(port);
+}
+
+CPort::CPort(void)
+{
+ clear();
+}
+
+CPort::~CPort(void)
+{
+ clear();
+}
+
+QString CPort::toString(const CPort::Side value)
+{
+ switch (value)
+ {
+  case CPort::psLeft: return "left";
+  case CPort::psRight: return "right";
+  case CPort::psTop: return "top";
+ case CPort::psBottom: return "bottom";
+ }
+ return "";
+}
+
+QString CPort::toString(const CPort::Direction value)
+{
+ switch (value)
+ {
+  case CPort::pdNC: return "nc";
+  case CPort::pdIN: return "in";
+  case CPort::pdOUT: return "out";
+  case CPort::pdIO: return "io";
+  case CPort::pdOC: return "oc";
+  case CPort::pdPWR: return "pwr";
+  case CPort::pdPAS: return "pas";
+  case CPort::pdHIZ: return "hiz";
+ }
+ return "";
+}
+
+void CPort::operator =(const CPort& port)
+{
+ assign(port);
+}
+
+void CPort::clear(void)
+{
+ m_Name = "";
+ m_Coord = 0.0;
+ m_Direction = CPort::DEFAULT_DIRECTION;
+}
+
+void CPort::assign(const CPort& port)
+{
+ m_Name = port.m_Name;
+ m_Coord = port.m_Coord;
+ m_Direction = port.m_Direction;
+}
+
+void CPort::scale(const double factor)
+{
+ m_Coord *= factor;
+}
+
+void CPort::show(std::ostream& out, const int level)
+{
+ CEntity::show(out,level);
+ out<<"Pin:{Name='"<<m_Name.toUtf8().data()<<"', Coord="<<m_Coord
+    <<", Direction="<<toString(m_Direction).toUtf8().data()
+    <<"}"<<std::endl;
+}
+
+bool CPort::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
+{
+ QDomElement e = root;
+ if (e.nodeName()!="port") e = e.nextSiblingElement("port");
+ if (!e.isNull())
+ {
+  QString s = e.attribute("name");
+  if (!s.isEmpty())
+  {
+   m_Name = s;
+  }
+  s = e.attribute("side");
+  if (!s.isEmpty())
+  {
+   if (s=="left") { m_Side = CPort::psLeft; }
+   else if (s=="right") { m_Side = CPort::psRight; }
+   else if (s=="top") { m_Side = CPort::psTop; }
+   else if (s=="bottom") { m_Side = CPort::psBottom; }
+  }
+  s = e.attribute("coord");
+  if (!s.isEmpty())
+  {
+   bool ok = false;
+   double value = s.toDouble(&ok);
+   if (ok) { m_Coord = value; }
+  }
+  s = e.attribute("direction");
+  if (!s.isEmpty())
+  {
+   if (s=="nc") { m_Direction = CPort::pdNC; }
+   else if (s=="in") { m_Direction = CPort::pdIN; }
+   else if (s=="out") { m_Direction = CPort::pdOUT; }
+   else if (s=="io") { m_Direction = CPort::pdIO; }
+   else if (s=="oc") { m_Direction = CPort::pdOC; }
+   else if (s=="pwr") { m_Direction = CPort::pdPWR; }
+   else if (s=="pas") { m_Direction = CPort::pdPAS; }
+   else if (s=="hiz") { m_Direction = CPort::pdHIZ; }
+  }
+  return true;
+ }
+ return false;
+}
+
+bool CPort::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
+{
+ if (!host.isNull() && !root.isNull())
+ {
+  QDomElement e = host.createElement("port");
+  e.setAttribute("name",QString("%1").arg(m_Name));
+  e.setAttribute("side",toString(m_Side));
+  e.setAttribute("coord",QString("%1").arg(m_Coord));
+  e.setAttribute("direction",toString(m_Direction));
   root.appendChild(e);
   return true;
  }
@@ -3981,7 +4282,7 @@ void CLabel::show(std::ostream& out, const int level)
     <<"}"<<std::endl;
 }
 
-bool CLabel::readFromXML(const QDomElement& root)
+bool CLabel::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="label") e = e.nextSiblingElement("label");
@@ -4055,7 +4356,7 @@ bool CLabel::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CLabel::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CLabel::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -4064,20 +4365,20 @@ bool CLabel::writeToXML(QDomDocument& host, QDomElement& root, const bool defaul
   e.setAttribute("y",QString("%1").arg(m_Y));
   e.setAttribute("size",QString("%1").arg(m_Size));
   e.setAttribute("layer",QString("%1").arg(m_Layer));
-  if (defaults || CLabel::DEFAULT_FONT!=m_Font)
+  if (options.writeDefaults() || CLabel::DEFAULT_FONT!=m_Font)
   {
    e.setAttribute("font",CText::toString(m_Font));
   }
-  if (defaults || CLabel::DEFAULT_RATIO!=m_Ratio)
+  if (options.writeDefaults() || CLabel::DEFAULT_RATIO!=m_Ratio)
   {
    e.setAttribute("ratio",toString(m_Ratio));
   }
-  if (defaults || CLabel::DEFAULT_ROTATION!=m_Rotation || m_Reflection)
+  if (options.writeDefaults() || CLabel::DEFAULT_ROTATION!=m_Rotation || m_Reflection)
   {
    //e.setAttribute("rot",QString("R%1").arg(m_Rotation));
    e.setAttribute("rot",encodeTransformation(m_Rotation,m_Reflection,false));
   }
-  if (defaults || m_XRef)
+  if (options.writeDefaults() || m_XRef)
   {
    e.setAttribute("xref",CEntity::toString(m_XRef));
   }
@@ -4141,7 +4442,7 @@ void CJunction::show(std::ostream& out, const int level)
  out<<"Junction:{X="<<m_X<<", Y="<<m_Y<<"}"<<std::endl;
 }
 
-bool CJunction::readFromXML(const QDomElement& root)
+bool CJunction::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="junction") e = e.nextSiblingElement("junction");
@@ -4166,7 +4467,7 @@ bool CJunction::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CJunction::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CJunction::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -4235,7 +4536,7 @@ void CConnect::show(std::ostream& out, const int level)
     <<"}"<<std::endl;
 }
 
-bool CConnect::readFromXML(const QDomElement& root)
+bool CConnect::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="connect") e = e.nextSiblingElement("connect");
@@ -4267,7 +4568,7 @@ bool CConnect::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CConnect::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CConnect::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -4275,7 +4576,7 @@ bool CConnect::writeToXML(QDomDocument& host, QDomElement& root, const bool defa
   e.setAttribute("gate",m_Gate);
   e.setAttribute("pin",m_Pin);
   e.setAttribute("pad",m_Pad);
-  if (defaults || CConnect::DEFAULT_ROUTE!=m_Route)
+  if (options.writeDefaults() || CConnect::DEFAULT_ROUTE!=m_Route)
   {
    e.setAttribute("route",toString(m_Route));
   }
@@ -4371,7 +4672,7 @@ void CAttribute::show(std::ostream& out, const int level)
     <<"}"<<std::endl;
 }
 
-bool CAttribute::readFromXML(const QDomElement& root)
+bool CAttribute::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="attribute") e = e.nextSiblingElement("attribute");
@@ -4468,13 +4769,13 @@ bool CAttribute::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CAttribute::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CAttribute::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
   QDomElement e = host.createElement("attribute");
   e.setAttribute("name",m_Name);
-  if (defaults || !m_Value.isEmpty())
+  if (options.writeDefaults() || !m_Value.isEmpty())
   {
    e.setAttribute("value",m_Value);
   }
@@ -4482,28 +4783,28 @@ bool CAttribute::writeToXML(QDomDocument& host, QDomElement& root, const bool de
   e.setAttribute("y",QString("%1").arg(m_Y));
   e.setAttribute("size",QString("%1").arg(m_Size));
   e.setAttribute("layer",QString("%1").arg(m_Layer));
-  if (defaults || CText::DEFAULT_FONT!=m_Font)
+  if (options.writeDefaults() || CText::DEFAULT_FONT!=m_Font)
   {
    e.setAttribute("font",CText::toString(m_Font));
   }
-  if (defaults || CText::DEFAULT_RATIO!=m_Ratio)
+  if (options.writeDefaults() || CText::DEFAULT_RATIO!=m_Ratio)
   {
    e.setAttribute("ratio",QString("%1").arg(m_Ratio));
   }
-  if (defaults || CAttribute::DEFAULT_ROTATION!=m_Rotation || m_Reflection)
+  if (options.writeDefaults() || CAttribute::DEFAULT_ROTATION!=m_Rotation || m_Reflection)
   {
    //e.setAttribute("rot",QString("R%1").arg(m_Rotation));
    e.setAttribute("rot",encodeTransformation(m_Rotation,m_Reflection,false));
   }
-  if (defaults || CText::taBottomLeft!=m_Align)
+  if (options.writeDefaults() || CText::taBottomLeft!=m_Align)
   {
    e.setAttribute("align",CText::toString(m_Align));
   }
-  if (defaults || CAttribute::DEFAULT_DISPLAY!=m_Display)
+  if (options.writeDefaults() || CAttribute::DEFAULT_DISPLAY!=m_Display)
   {
    e.setAttribute("display",toString(m_Display));
   }
-  if (defaults || m_Constant)
+  if (options.writeDefaults() || m_Constant)
   {
    e.setAttribute("constant",CEntity::toString(m_Constant));
   }
@@ -4557,7 +4858,7 @@ void CPinRef::show(std::ostream& out, const int level)
     <<"'}"<<std::endl;
 }
 
-bool CPinRef::readFromXML(const QDomElement& root)
+bool CPinRef::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="pinref") e = e.nextSiblingElement("pinref");
@@ -4583,7 +4884,7 @@ bool CPinRef::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CPinRef::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CPinRef::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -4591,6 +4892,82 @@ bool CPinRef::writeToXML(QDomDocument& host, QDomElement& root, const bool defau
   e.setAttribute("part",m_Part);
   e.setAttribute("gate",m_Gate);
   e.setAttribute("pin",m_Pin);
+  root.appendChild(e);
+  return true;
+ }
+ return false;
+}
+
+//------------------------------------------------------------------------------
+
+CPortRef::CPortRef(const CPortRef& portRef)
+{
+ assign(portRef);
+}
+
+CPortRef::CPortRef(void)
+{
+ clear();
+}
+
+CPortRef::~CPortRef(void)
+{
+ clear();
+}
+
+void CPortRef::operator =(const CPortRef& portRef)
+{
+ assign(portRef);
+}
+
+void CPortRef::clear(void)
+{
+ m_ModuleInstance.clear();
+ m_Port.clear();
+}
+
+void CPortRef::assign(const CPortRef& portRef)
+{
+ m_ModuleInstance = portRef.m_ModuleInstance;
+ m_Port = portRef.m_Port;
+}
+
+void CPortRef::show(std::ostream& out, const int level)
+{
+ CEntity::show(out,level);
+ out<<"PortRef:{ModuleInstance='"<<m_ModuleInstance.toUtf8().data()
+    <<"', Port='"<<m_Port.toUtf8().data()
+    <<"'}"<<std::endl;
+}
+
+bool CPortRef::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
+{
+ QDomElement e = root;
+ if (e.nodeName()!="portref") e = e.nextSiblingElement("portref");
+ if (!e.isNull())
+ {
+  QString s = e.attribute("moduleinst");
+  if (!s.isEmpty())
+  {
+   m_ModuleInstance = s;
+  }
+  s = e.attribute("port");
+  if (!s.isEmpty())
+  {
+   m_Port = s;
+  }
+  return true;
+ }
+ return false;
+}
+
+bool CPortRef::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
+{
+ if (!host.isNull() && !root.isNull())
+ {
+  QDomElement e = host.createElement("portref");
+  e.setAttribute("moduleinst",m_ModuleInstance);
+  e.setAttribute("port",m_Port);
   root.appendChild(e);
   return true;
  }
@@ -4645,7 +5022,7 @@ void CContactRef::show(std::ostream& out, const int level)
     <<"'}"<<std::endl;
 }
 
-bool CContactRef::readFromXML(const QDomElement& root)
+bool CContactRef::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="contactref") e = e.nextSiblingElement("contactref");
@@ -4677,18 +5054,18 @@ bool CContactRef::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CContactRef::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CContactRef::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
   QDomElement e = host.createElement("contactref");
   e.setAttribute("element",m_Element);
   e.setAttribute("pad",m_Pad);
-  if (defaults || CContactRef::DEFAULT_ROUTE!=m_Route)
+  if (options.writeDefaults() || CContactRef::DEFAULT_ROUTE!=m_Route)
   {
    e.setAttribute("route",CConnect::toString(m_Route));
   }
-  if (defaults || !m_RouteTag.isEmpty())
+  if (options.writeDefaults() || !m_RouteTag.isEmpty())
   {
    e.setAttribute("routetag",m_RouteTag);
   }
@@ -4764,7 +5141,7 @@ void CTechnology::show(std::ostream& out, const int level)
  CEntity::show(out,level); out<<"}"<<std::endl;
 }
 
-bool CTechnology::readFromXML(const QDomElement& root)
+bool CTechnology::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="technology") e = e.nextSiblingElement("technology");
@@ -4778,7 +5155,7 @@ bool CTechnology::readFromXML(const QDomElement& root)
    {
     CAttribute *a = new CAttribute();
     m_Attributes.append(a);
-    a->readFromXML(cc);
+    a->readFromXML(cc,options);
     cc = cc.nextSiblingElement("attribute");
    }
   }
@@ -4792,7 +5169,7 @@ bool CTechnology::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CTechnology::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CTechnology::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -4800,7 +5177,7 @@ bool CTechnology::writeToXML(QDomDocument& host, QDomElement& root, const bool d
   e.setAttribute("name",m_Name);
   for (int i = 0; i < m_Attributes.size(); i++)
   {
-   m_Attributes[i]->writeToXML(host,e,defaults);
+   m_Attributes[i]->writeToXML(host,e,options);
   }
   root.appendChild(e);
   return true;
@@ -4890,7 +5267,7 @@ void CInstance::show(std::ostream& out, const int level)
  CEntity::show(out,level); out<<"}"<<std::endl;
 }
 
-bool CInstance::readFromXML(const QDomElement& root)
+bool CInstance::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="instance") e = e.nextSiblingElement("instance");
@@ -4901,7 +5278,7 @@ bool CInstance::readFromXML(const QDomElement& root)
   {
    CAttribute *a = new CAttribute();
    m_Attributes.append(a);
-   a->readFromXML(c);
+   a->readFromXML(c,options);
    c = c.nextSiblingElement("attribute");
   }
   QString s = e.attribute("part");
@@ -4953,7 +5330,7 @@ bool CInstance::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CInstance::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CInstance::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -4962,18 +5339,18 @@ bool CInstance::writeToXML(QDomDocument& host, QDomElement& root, const bool def
   e.setAttribute("gate",m_Gate);
   e.setAttribute("x",QString("%1").arg(m_X));
   e.setAttribute("y",QString("%1").arg(m_Y));
-  if (defaults || m_Smashed)
+  if (options.writeDefaults() || m_Smashed)
   {
    e.setAttribute("smashed",CEntity::toString(m_Smashed));
   }
-  if (defaults || CAttribute::DEFAULT_ROTATION!=m_Rotation || m_Reflection || m_Spin)
+  if (options.writeDefaults() || CAttribute::DEFAULT_ROTATION!=m_Rotation || m_Reflection || m_Spin)
   {
    //e.setAttribute("rot",QString("R%1").arg(m_Rotation));
    e.setAttribute("rot",encodeTransformation(m_Rotation,m_Reflection,m_Spin));
   }
   for (int i = 0; i < m_Attributes.size(); i++)
   {
-   m_Attributes[i]->writeToXML(host,e,defaults);
+   m_Attributes[i]->writeToXML(host,e,options);
   }
   root.appendChild(e);
   return true;
@@ -4982,6 +5359,181 @@ bool CInstance::writeToXML(QDomDocument& host, QDomElement& root, const bool def
 }
 
 void CInstance::setRotation(const double value)
+{
+ if ((value<45.0) || (value>=315.0)) { m_Rotation = 0.0; }
+ else if (value<135.0) { m_Rotation = 90.0; }
+ else if (value<225.0) { m_Rotation = 180.0; }
+ else if (value<315.0) { m_Rotation = 270.0; }
+}
+
+//------------------------------------------------------------------------------
+
+CModuleInstance::CModuleInstance(const CModuleInstance& instance)
+{
+ assign(instance);
+}
+
+CModuleInstance::CModuleInstance(void)
+{
+ clear();
+}
+
+CModuleInstance::~CModuleInstance(void)
+{
+ clear();
+}
+
+void CModuleInstance::operator =(const CModuleInstance& instance)
+{
+ assign(instance);
+}
+
+void CModuleInstance::clear(void)
+{
+ m_Name.clear();
+ m_Module.clear();
+ m_ModuleVariant.clear();
+ m_X = 0.0;
+ m_Y = 0.0;
+ m_Offset = 0;
+ m_Smashed = false;
+ m_Rotation = 0.0;
+ m_Reflection = false;
+ m_Spin = false;
+}
+
+void CModuleInstance::assign(const CModuleInstance& instance)
+{
+ clear();
+ m_Name = instance.m_Name;
+ m_Module = instance.m_Module;
+ m_ModuleVariant = instance.m_ModuleVariant;
+ m_X = instance.m_X;
+ m_Y = instance.m_Y;
+ m_Offset = instance.m_Offset;
+ m_Smashed = instance.m_Smashed;
+ m_Rotation = instance.m_Rotation;
+ m_Spin = instance.m_Spin;
+}
+
+void CModuleInstance::scale(const double factor)
+{
+ m_X *= factor;
+ m_Y *= factor;
+}
+
+void CModuleInstance::show(std::ostream& out, const int level)
+{
+ CEntity::show(out,level);
+ out<<"Instance:{Name='"<<m_Name.toUtf8().data()
+    <<"', Module='"<<m_Module.toUtf8().data()
+      <<"', ModuleVariant='"<<m_ModuleVariant.toUtf8().data()
+    <<"', X="<<m_X<<", Y="<<m_Y<<", Offset="<<m_Offset
+    <<CEntity::toString(m_Smashed).toUtf8().data()
+    <<", Rotation="<<m_Rotation<<","<<std::endl;
+ CEntity::show(out,level); out<<"}"<<std::endl;
+}
+
+bool CModuleInstance::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
+{
+ QDomElement e = root;
+ if (e.nodeName()!="moduleinst") e = e.nextSiblingElement("moduleinst");
+ if (!e.isNull())
+ {
+  QString s = e.attribute("name");
+  if (!s.isEmpty())
+  {
+   m_Name = s;
+  }
+  s = e.attribute("module");
+  if (!s.isEmpty())
+  {
+   m_Module = s;
+  }
+  s = e.attribute("modulevariant");
+  if (!s.isEmpty())
+  {
+   m_ModuleVariant = s;
+  }
+  s = e.attribute("x");
+  if (!s.isEmpty())
+  {
+   bool ok = false;
+   double value = s.toDouble(&ok);
+   if (ok) { m_X = value; }
+  }
+  s = e.attribute("y");
+  if (!s.isEmpty())
+  {
+   bool ok = false;
+   double value = s.toDouble(&ok);
+   if (ok) { m_Y = value; }
+  }
+  s = e.attribute("offset");
+  if (!s.isEmpty())
+  {
+   bool ok = false;
+   int value = s.toInt(&ok);
+   if (ok) { m_Offset = value; }
+  }
+  s = e.attribute("smashed");
+  if (!s.isEmpty())
+  {
+   if (s=="yes") { m_Smashed = true; }
+   else if (s=="no") { m_Smashed = false; }
+  }
+  s = e.attribute("rot");
+  if (!s.isEmpty())
+  {
+   decodeTransformation(s,m_Rotation,m_Reflection,m_Spin);
+   /*
+   if (s.at(0)=='R')
+   {
+    bool ok = false;
+    QString ss = s.right(s.length()-1);
+    double value = ss.toDouble(&ok);
+    if (ok) { m_Rotation = value; }
+   }
+   */
+  }
+  return true;
+ }
+ return false;
+}
+
+bool CModuleInstance::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
+{
+ if (!host.isNull() && !root.isNull())
+ {
+  QDomElement e = host.createElement("moduleinst");
+  e.setAttribute("name",m_Name);
+  e.setAttribute("module",m_Module);
+  if (options.writeDefaults() || !m_ModuleVariant.isEmpty())
+  {
+   e.setAttribute("modulevariant",m_ModuleVariant);
+  }
+  e.setAttribute("x",QString("%1").arg(m_X));
+  e.setAttribute("y",QString("%1").arg(m_Y));
+  if (options.writeDefaults() || CModuleInstance::DEFAULT_OFFSET!=m_Offset)
+  {
+   e.setAttribute("offset",QString("%1").arg(m_Offset));
+  }
+  if (options.writeDefaults() || m_Smashed)
+  {
+   e.setAttribute("smashed",CEntity::toString(m_Smashed));
+  }
+  if (options.writeDefaults() || CAttribute::DEFAULT_ROTATION!=m_Rotation || m_Reflection || m_Spin)
+  {
+   //e.setAttribute("rot",QString("R%1").arg(m_Rotation));
+   e.setAttribute("rot",encodeTransformation(m_Rotation,m_Reflection,m_Spin));
+  }
+  root.appendChild(e);
+  return true;
+ }
+ return false;
+}
+
+void CModuleInstance::setRotation(const double value)
 {
  if ((value<45.0) || (value>=315.0)) { m_Rotation = 0.0; }
  else if (value<135.0) { m_Rotation = 90.0; }
@@ -5084,7 +5636,7 @@ void CPart::show(std::ostream& out, const int level)
  CEntity::show(out,level); out<<"}"<<std::endl;
 }
 
-bool CPart::readFromXML(const QDomElement& root)
+bool CPart::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="part") e = e.nextSiblingElement("part");
@@ -5095,7 +5647,7 @@ bool CPart::readFromXML(const QDomElement& root)
   {
    CAttribute *a = new CAttribute();
    m_Attributes.append(a);
-   a->readFromXML(c);
+   a->readFromXML(c,options);
    c = c.nextSiblingElement("attribute");
   }
   c = e.firstChildElement("variant");
@@ -5103,7 +5655,7 @@ bool CPart::readFromXML(const QDomElement& root)
   {
    CVariant *v = new CVariant();
    m_Variants.append(v);
-   v->readFromXML(c);
+   v->readFromXML(c,options);
    c = c.nextSiblingElement("variant");
   }
   QString s = e.attribute("name");
@@ -5141,7 +5693,7 @@ bool CPart::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CPart::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CPart::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -5150,21 +5702,21 @@ bool CPart::writeToXML(QDomDocument& host, QDomElement& root, const bool default
   e.setAttribute("library",m_Library);
   e.setAttribute("deviceset",m_DeviceSet);
   e.setAttribute("device",m_Device);
-  if (defaults || !m_Technology.isEmpty())
+  if (options.writeDefaults() || !m_Technology.isEmpty())
   {
    e.setAttribute("technology",m_Technology);
   }
-  if (defaults || !m_Value.isEmpty())
+  if (options.writeDefaults() || !m_Value.isEmpty())
   {
    e.setAttribute("value",m_Value);
   }
   for (int i = 0; i < m_Attributes.size(); i++)
   {
-   m_Attributes[i]->writeToXML(host,e,defaults);
+   m_Attributes[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_Variants.size(); i++)
   {
-   m_Variants[i]->writeToXML(host,e,defaults);
+   m_Variants[i]->writeToXML(host,e,options);
   }
   root.appendChild(e);
   return true;
@@ -5286,7 +5838,7 @@ void CPolygon::show(std::ostream& out, const int level)
  CEntity::show(out,level); out<<"}"<<std::endl;
 }
 
-bool CPolygon::readFromXML(const QDomElement& root)
+bool CPolygon::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="polygon") e = e.nextSiblingElement("polygon");
@@ -5297,7 +5849,7 @@ bool CPolygon::readFromXML(const QDomElement& root)
   {
    CVertex *v = new CVertex();
    m_Vertices.append(v);
-   v->readFromXML(c);
+   v->readFromXML(c,options);
    c = c.nextSiblingElement("vertex");
   }
   QString s = e.attribute("width");
@@ -5359,7 +5911,7 @@ bool CPolygon::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CPolygon::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CPolygon::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -5367,26 +5919,26 @@ bool CPolygon::writeToXML(QDomDocument& host, QDomElement& root, const bool defa
   e.setAttribute("width",QString("%1").arg(m_Width));
   e.setAttribute("layer",QString("%1").arg(m_Layer));
   e.setAttribute("spacing",QString("%1").arg(m_Spacing));
-  if (defaults || CPolygon::ppSolid!=m_Pour)
+  if (options.writeDefaults() || CPolygon::ppSolid!=m_Pour)
   {
    e.setAttribute("pour",toString(m_Pour));
   }
   e.setAttribute("isolate",QString("%1").arg(m_Isolate));
-  if (defaults || m_Orphans)
+  if (options.writeDefaults() || m_Orphans)
   {
    e.setAttribute("orphans",CEntity::toString(m_Orphans));
   }
-  if (defaults || !m_Thermals)
+  if (options.writeDefaults() || !m_Thermals)
   {
    e.setAttribute("thermals",CEntity::toString(m_Thermals));
   }
-  if (defaults || 0!=m_Rank)
+  if (options.writeDefaults() || 0!=m_Rank)
   {
    e.setAttribute("rank",QString("%1").arg(m_Rank));
   }
   for (int i = 0; i < m_Vertices.size(); i++)
   {
-   m_Vertices[i]->writeToXML(host,e,defaults);
+   m_Vertices[i]->writeToXML(host,e,options);
   }
   root.appendChild(e);
   return true;
@@ -5438,6 +5990,7 @@ void CElement::clear(void)
  m_Smashed = false;
  m_Rotation = 0.0;
  m_Reflection = false;
+ m_Populate = true;
 }
 
 void CElement::assign(const CElement& element)
@@ -5463,6 +6016,7 @@ void CElement::assign(const CElement& element)
  m_Smashed = element.m_Smashed;
  m_Rotation = element.m_Rotation;
  m_Reflection = element.m_Reflection;
+ m_Populate = element.m_Populate;
 }
 
 void CElement::scale(const double factor)
@@ -5485,7 +6039,8 @@ void CElement::show(std::ostream& out, const int level)
     <<"', X="<<m_X<<", Y="<<m_Y
     <<", Locked="<<CEntity::toString(m_Locked).toUtf8().data()
     <<", Smashed="<<CEntity::toString(m_Smashed).toUtf8().data()
-    <<", Rotation="<<m_Rotation<<","<<std::endl;
+    <<", Rotation="<<m_Rotation
+    <<", Populate="<<CEntity::toString(m_Populate).toUtf8().data()<<","<<std::endl;
  CEntity::show(out,level); out<<"\tAttributes="<<std::endl;
  CEntity::show(out,level); out<<"\t{"<<std::endl;
  for (int i = 0; i < m_Attributes.size(); i++)
@@ -5503,7 +6058,7 @@ void CElement::show(std::ostream& out, const int level)
  CEntity::show(out,level); out<<"}"<<std::endl;
 }
 
-bool CElement::readFromXML(const QDomElement& root)
+bool CElement::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="element") e = e.nextSiblingElement("element");
@@ -5514,7 +6069,7 @@ bool CElement::readFromXML(const QDomElement& root)
   {
    CAttribute *a = new CAttribute();
    m_Attributes.append(a);
-   a->readFromXML(c);
+   a->readFromXML(c,options);
    c = c.nextSiblingElement("attribute");
   }
   c = e.firstChildElement("variant");
@@ -5522,7 +6077,7 @@ bool CElement::readFromXML(const QDomElement& root)
   {
    CVariant *v = new CVariant();
    m_Variants.append(v);
-   v->readFromXML(c);
+   v->readFromXML(c,options);
    c = c.nextSiblingElement("variant");
   }
   QString s = e.attribute("name");
@@ -5586,12 +6141,18 @@ bool CElement::readFromXML(const QDomElement& root)
    }
    */
   }
+  s = e.attribute("populate");
+  if (!s.isEmpty())
+  {
+   if (s=="yes") { m_Populate = true; }
+   else if (s=="no") { m_Populate = false; }
+  }
   return true;
  }
  return false;
 }
 
-bool CElement::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CElement::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -5602,26 +6163,33 @@ bool CElement::writeToXML(QDomDocument& host, QDomElement& root, const bool defa
   e.setAttribute("value",m_Value);
   e.setAttribute("x",QString("%1").arg(m_X));
   e.setAttribute("y",QString("%1").arg(m_Y));
-  if (defaults || m_Locked)
+  if (options.version()>=CVersionNumber(7,0))
+  {
+   if (options.writeDefaults() || !m_Populate)
+   {
+    e.setAttribute("populate",CEntity::toString(m_Populate));
+   }
+  }
+  if (options.writeDefaults() || m_Locked)
   {
    e.setAttribute("locked",CEntity::toString(m_Locked));
   }
-  if (defaults || m_Smashed)
+  if (options.writeDefaults() || m_Smashed)
   {
    e.setAttribute("smashed",CEntity::toString(m_Smashed));
   }
-  if (defaults || CElement::DEFAULT_ROTATION!=m_Rotation || m_Reflection)
+  if (options.writeDefaults() || CElement::DEFAULT_ROTATION!=m_Rotation || m_Reflection)
   {
    //e.setAttribute("rot",QString("R%1").arg(m_Rotation));
    e.setAttribute("rot",encodeTransformation(m_Rotation,m_Reflection,false));
   }
   for (int i = 0; i < m_Attributes.size(); i++)
   {
-   m_Attributes[i]->writeToXML(host,e,defaults);
+   m_Attributes[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_Variants.size(); i++)
   {
-   m_Variants[i]->writeToXML(host,e,defaults);
+   m_Variants[i]->writeToXML(host,e,options);
   }
   root.appendChild(e);
   return true;
@@ -5761,7 +6329,7 @@ void CSignal::show(std::ostream& out, const int level)
  CEntity::show(out,level); out<<"}"<<std::endl;
 }
 
-bool CSignal::readFromXML(const QDomElement& root)
+bool CSignal::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="signal") e = e.nextSiblingElement("signal");
@@ -5772,7 +6340,7 @@ bool CSignal::readFromXML(const QDomElement& root)
   {
    CContactRef *r = new CContactRef();
    m_ContactRefs.append(r);
-   r->readFromXML(c);
+   r->readFromXML(c,options);
    c = c.nextSiblingElement("contactref");
   }
   c = e.firstChildElement("polygon");
@@ -5780,7 +6348,7 @@ bool CSignal::readFromXML(const QDomElement& root)
   {
    CPolygon *p = new CPolygon();
    m_Polygons.append(p);
-   p->readFromXML(c);
+   p->readFromXML(c,options);
    c = c.nextSiblingElement("polygon");
   }
   c = e.firstChildElement("wire");
@@ -5788,7 +6356,7 @@ bool CSignal::readFromXML(const QDomElement& root)
   {
    CWire *w = new CWire();
    m_Wires.append(w);
-   w->readFromXML(c);
+   w->readFromXML(c,options);
    c = c.nextSiblingElement("wire");
   }
   c = e.firstChildElement("via");
@@ -5796,7 +6364,7 @@ bool CSignal::readFromXML(const QDomElement& root)
   {
    CVia *v = new CVia();
    m_Vias.append(v);
-   v->readFromXML(c);
+   v->readFromXML(c,options);
    c = c.nextSiblingElement("via");
   }
   QString s = e.attribute("name");
@@ -5822,35 +6390,35 @@ bool CSignal::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CSignal::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CSignal::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
   QDomElement e = host.createElement("signal");
   e.setAttribute("name",m_Name);
-  if (defaults || CSignal::DEFAULT_CLASS!=m_Class)
+  if (options.writeDefaults() || CSignal::DEFAULT_CLASS!=m_Class)
   {
    e.setAttribute("class",QString("%1").arg(m_Class));
   }
-  if (defaults || m_AirWiresHidden)
+  if (options.writeDefaults() || m_AirWiresHidden)
   {
    e.setAttribute("airwireshidden",CEntity::toString(m_AirWiresHidden));
   }
   for (int i = 0; i < m_ContactRefs.size(); i++)
   {
-   m_ContactRefs[i]->writeToXML(host,e,defaults);
+   m_ContactRefs[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_Polygons.size(); i++)
   {
-   m_Polygons[i]->writeToXML(host,e,defaults);
+   m_Polygons[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_Wires.size(); i++)
   {
-   m_Wires[i]->writeToXML(host,e,defaults);
+   m_Wires[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_Vias.size(); i++)
   {
-   m_Vias[i]->writeToXML(host,e,defaults);
+   m_Vias[i]->writeToXML(host,e,options);
   }
   root.appendChild(e);
   return true;
@@ -5886,6 +6454,10 @@ void CSegment::clear(void)
  {
   if (0!=m_PinRefs[i]) delete m_PinRefs[i];
  }
+ for (int i = 0; i < m_PortRefs.size(); i++)
+ {
+  if (0!=m_PortRefs[i]) delete m_PortRefs[i];
+ }
  for (int i = 0; i < m_Wires.size(); i++)
  {
   if (0!=m_Wires[i]) delete m_Wires[i];
@@ -5899,6 +6471,7 @@ void CSegment::clear(void)
   if (0!=m_Labels[i]) delete m_Labels[i];
  }
  m_PinRefs.clear();
+ m_PortRefs.clear();
  m_Wires.clear();
  m_Junctions.clear();
  m_Labels.clear();
@@ -5911,6 +6484,11 @@ void CSegment::assign(const CSegment& segment)
  {
   CPinRef *r = new CPinRef(*segment.m_PinRefs.at(i));
   m_PinRefs.append(r);
+ }
+ for (int i = 0; i < segment.m_PortRefs.size(); i++)
+ {
+  CPortRef *r = new CPortRef(*segment.m_PortRefs.at(i));
+  m_PortRefs.append(r);
  }
  for (int i = 0; i < segment.m_Wires.size(); i++)
  {
@@ -5956,6 +6534,13 @@ void CSegment::show(std::ostream& out, const int level)
   m_PinRefs[i]->show(out,level+2);
  }
  CEntity::show(out,level); out<<"\t}"<<std::endl;
+ CEntity::show(out,level); out<<"\tPortRefs="<<std::endl;
+ CEntity::show(out,level); out<<"\t{"<<std::endl;
+ for (int i = 0; i < m_PortRefs.size(); i++)
+ {
+  m_PortRefs[i]->show(out,level+2);
+ }
+ CEntity::show(out,level); out<<"\t}"<<std::endl;
  CEntity::show(out,level); out<<"\tWires="<<std::endl;
  CEntity::show(out,level); out<<"\t{"<<std::endl;
  for (int i = 0; i < m_Wires.size(); i++)
@@ -5980,7 +6565,7 @@ void CSegment::show(std::ostream& out, const int level)
  CEntity::show(out,level); out<<"}"<<std::endl;
 }
 
-bool CSegment::readFromXML(const QDomElement& root)
+bool CSegment::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="segment") e = e.nextSiblingElement("segment");
@@ -5991,15 +6576,26 @@ bool CSegment::readFromXML(const QDomElement& root)
   {
    CPinRef *r = new CPinRef();
    m_PinRefs.append(r);
-   r->readFromXML(c);
+   r->readFromXML(c,options);
    c = c.nextSiblingElement("pinref");
+  }
+  //if (options.version()>=CVersionNumber(7,0))
+  {
+   c = e.firstChildElement("portref");
+   while (!c.isNull())
+   {
+    CPortRef *r = new CPortRef();
+    m_PortRefs.append(r);
+    r->readFromXML(c,options);
+    c = c.nextSiblingElement("portref");
+   }
   }
   c = e.firstChildElement("wire");
   while (!c.isNull())
   {
    CWire *w = new CWire();
    m_Wires.append(w);
-   w->readFromXML(c);
+   w->readFromXML(c,options);
    c = c.nextSiblingElement("wire");
   }
   c = e.firstChildElement("junction");
@@ -6007,7 +6603,7 @@ bool CSegment::readFromXML(const QDomElement& root)
   {
    CJunction *j = new CJunction();
    m_Junctions.append(j);
-   j->readFromXML(c);
+   j->readFromXML(c,options);
    c = c.nextSiblingElement("junction");
   }
   c = e.firstChildElement("label");
@@ -6015,7 +6611,7 @@ bool CSegment::readFromXML(const QDomElement& root)
   {
    CLabel *l = new CLabel();
    m_Labels.append(l);
-   l->readFromXML(c);
+   l->readFromXML(c,options);
    c = c.nextSiblingElement("label");
   }
   return true;
@@ -6023,26 +6619,33 @@ bool CSegment::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CSegment::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CSegment::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
   QDomElement e = host.createElement("segment");
   for (int i = 0; i < m_PinRefs.size(); i++)
   {
-   m_PinRefs[i]->writeToXML(host,e,defaults);
+   m_PinRefs[i]->writeToXML(host,e,options);
+  }
+  if (options.version()>=CVersionNumber(7,0))
+  {
+   for (int i = 0; i < m_PortRefs.size(); i++)
+   {
+    m_PortRefs[i]->writeToXML(host,e,options);
+   }
   }
   for (int i = 0; i < m_Wires.size(); i++)
   {
-   m_Wires[i]->writeToXML(host,e,defaults);
+   m_Wires[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_Junctions.size(); i++)
   {
-   m_Junctions[i]->writeToXML(host,e,defaults);
+   m_Junctions[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_Labels.size(); i++)
   {
-   m_Labels[i]->writeToXML(host,e,defaults);
+   m_Labels[i]->writeToXML(host,e,options);
   }
   root.appendChild(e);
   return true;
@@ -6119,7 +6722,7 @@ void CNet::show(std::ostream& out, const int level)
  CEntity::show(out,level); out<<"}"<<std::endl;
 }
 
-bool CNet::readFromXML(const QDomElement& root)
+bool CNet::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="net") e = e.nextSiblingElement("net");
@@ -6130,7 +6733,7 @@ bool CNet::readFromXML(const QDomElement& root)
   {
    CSegment *g = new CSegment();
    m_Segments.append(g);
-   g->readFromXML(c);
+   g->readFromXML(c,options);
    c = c.nextSiblingElement("segment");
   }
   QString s = e.attribute("name");
@@ -6150,19 +6753,19 @@ bool CNet::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CNet::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CNet::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
   QDomElement e = host.createElement("net");
   e.setAttribute("name",m_Name);
-  if (defaults || CNet::DEFAULT_CLASS!=m_Class)
+  if (options.writeDefaults() || CNet::DEFAULT_CLASS!=m_Class)
   {
    e.setAttribute("class",QString("%1").arg(m_Class));
   }
   for (int i = 0; i < m_Segments.size(); i++)
   {
-   m_Segments[i]->writeToXML(host,e,defaults);
+   m_Segments[i]->writeToXML(host,e,options);
   }
   root.appendChild(e);
   return true;
@@ -6235,7 +6838,7 @@ void CBus::show(std::ostream& out, const int level)
  CEntity::show(out,level); out<<"}"<<std::endl;
 }
 
-bool CBus::readFromXML(const QDomElement& root)
+bool CBus::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="bus") e = e.nextSiblingElement("bus");
@@ -6246,7 +6849,7 @@ bool CBus::readFromXML(const QDomElement& root)
   {
    CSegment *g = new CSegment();
    m_Segments.append(g);
-   g->readFromXML(c);
+   g->readFromXML(c,options);
    c = c.nextSiblingElement("segment");
   }
   QString s = e.attribute("name");
@@ -6259,7 +6862,7 @@ bool CBus::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CBus::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CBus::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -6267,7 +6870,7 @@ bool CBus::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults
   e.setAttribute("name",m_Name);
   for (int i = 0; i < m_Segments.size(); i++)
   {
-   m_Segments[i]->writeToXML(host,e,defaults);
+   m_Segments[i]->writeToXML(host,e,options);
   }
   root.appendChild(e);
   return true;
@@ -6367,7 +6970,7 @@ void CDevice::show(std::ostream& out, const int level)
  CEntity::show(out,level); out<<"}"<<std::endl;
 }
 
-bool CDevice::readFromXML(const QDomElement& root)
+bool CDevice::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="device") e = e.nextSiblingElement("device");
@@ -6381,7 +6984,7 @@ bool CDevice::readFromXML(const QDomElement& root)
    {
     CConnect *n = new CConnect();
     m_Connects.append(n);
-    n->readFromXML(cc);
+    n->readFromXML(cc,options);
     cc = cc.nextSiblingElement("connect");
    }
   }
@@ -6393,7 +6996,7 @@ bool CDevice::readFromXML(const QDomElement& root)
    {
     CTechnology *t = new CTechnology();
     m_Technologies.append(t);
-    t->readFromXML(cc);
+    t->readFromXML(cc,options);
     cc = cc.nextSiblingElement("technology");
    }
   }
@@ -6412,13 +7015,13 @@ bool CDevice::readFromXML(const QDomElement& root)
  return false;
 }
 
-bool CDevice::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CDevice::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
   QDomElement e = host.createElement("device");
   e.setAttribute("name",m_Name);
-  if (defaults || !m_Package.isEmpty())
+  if (options.writeDefaults() || !m_Package.isEmpty())
   {
    e.setAttribute("package",m_Package);
   }
@@ -6426,13 +7029,13 @@ bool CDevice::writeToXML(QDomDocument& host, QDomElement& root, const bool defau
   e.appendChild(c);
   for (int i = 0; i < m_Connects.size(); i++)
   {
-   m_Connects[i]->writeToXML(host,c,defaults);
+   m_Connects[i]->writeToXML(host,c,options);
   }
   c = host.createElement("technologies");
   e.appendChild(c);
   for (int i = 0; i < m_Technologies.size(); i++)
   {
-   m_Technologies[i]->writeToXML(host,c,defaults);
+   m_Technologies[i]->writeToXML(host,c,options);
   }
   root.appendChild(e);
   return true;
@@ -6543,7 +7146,7 @@ void CDeviceSet::show(std::ostream& out, const int level)
  CEntity::show(out,level); out<<"}"<<std::endl;
 }
 
-bool CDeviceSet::readFromXML(const QDomElement& root)
+bool CDeviceSet::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="deviceset") e = e.nextSiblingElement("deviceset");
@@ -6552,7 +7155,7 @@ bool CDeviceSet::readFromXML(const QDomElement& root)
   QDomElement c = e.firstChildElement("description");
   if (!c.isNull())
   {
-   m_Description.readFromXML(c);
+   m_Description.readFromXML(c,options);
   }
   c = e.firstChildElement("gates");
   if (!c.isNull())
@@ -6562,7 +7165,7 @@ bool CDeviceSet::readFromXML(const QDomElement& root)
    {
     CGate *g = new CGate();
     m_Gates.append(g);
-    g->readFromXML(cc);
+    g->readFromXML(cc,options);
     cc = cc.nextSiblingElement("gate");
    }
   }
@@ -6574,7 +7177,7 @@ bool CDeviceSet::readFromXML(const QDomElement& root)
    {
     CDevice *d = new CDevice();
     m_Devices.append(d);
-    d->readFromXML(cc);
+    d->readFromXML(cc,options);
     cc = cc.nextSiblingElement("device");
    }
   }
@@ -6598,32 +7201,32 @@ bool CDeviceSet::readFromXML(const QDomElement& root)
  return true;
 }
 
-bool CDeviceSet::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CDeviceSet::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
   QDomElement e = host.createElement("deviceset");
   e.setAttribute("name",m_Name);
-  if (defaults || !m_Prefix.isEmpty())
+  if (options.writeDefaults() || !m_Prefix.isEmpty())
   {
    e.setAttribute("prefix",m_Prefix);
   }
-  if (defaults || m_UserValue)
+  if (options.writeDefaults() || m_UserValue)
   {
    e.setAttribute("uservalue",CEntity::toString(m_UserValue));
   }
-  m_Description.writeToXML(host,e,defaults);
+  m_Description.writeToXML(host,e,options);
   QDomElement c = host.createElement("gates");
   e.appendChild(c);
   for (int i = 0; i < m_Gates.size(); i++)
   {
-   m_Gates[i]->writeToXML(host,c,defaults);
+   m_Gates[i]->writeToXML(host,c,options);
   }
   c = host.createElement("devices");
   e.appendChild(c);
   for (int i = 0; i < m_Devices.size(); i++)
   {
-   m_Devices[i]->writeToXML(host,c,defaults);
+   m_Devices[i]->writeToXML(host,c,options);
   }
   root.appendChild(e);
   return true;
@@ -6884,7 +7487,7 @@ void CSymbol::show(std::ostream& out, const int level)
  CEntity::show(out,level); out<<"}"<<std::endl;
 }
 
-bool CSymbol::readFromXML(const QDomElement& root)
+bool CSymbol::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="symbol") e = e.nextSiblingElement("symbol");
@@ -6893,14 +7496,14 @@ bool CSymbol::readFromXML(const QDomElement& root)
   QDomElement c = e.firstChildElement("description");
   if (!c.isNull())
   {
-   m_Description.readFromXML(c);
+   m_Description.readFromXML(c,options);
   }
   c = e.firstChildElement("polygon");
   while (!c.isNull())
   {
    CPolygon *p = new CPolygon();
    m_Polygons.append(p);
-   p->readFromXML(c);
+   p->readFromXML(c,options);
    c = c.nextSiblingElement("polygon");
   }
   c = e.firstChildElement("wire");
@@ -6908,7 +7511,7 @@ bool CSymbol::readFromXML(const QDomElement& root)
   {
    CWire *w = new CWire();
    m_Wires.append(w);
-   w->readFromXML(c);
+   w->readFromXML(c,options);
    c = c.nextSiblingElement("wire");
   }
   c = e.firstChildElement("text");
@@ -6916,7 +7519,7 @@ bool CSymbol::readFromXML(const QDomElement& root)
   {
    CText *t = new CText();
    m_Texts.append(t);
-   t->readFromXML(c);
+   t->readFromXML(c,options);
    c = c.nextSiblingElement("text");
   }
   c = e.firstChildElement("dimension");
@@ -6924,7 +7527,7 @@ bool CSymbol::readFromXML(const QDomElement& root)
   {
    CDimension *d = new CDimension();
    m_Dimensions.append(d);
-   d->readFromXML(c);
+   d->readFromXML(c,options);
    c = c.nextSiblingElement("dimension");
   }
   c = e.firstChildElement("pin");
@@ -6932,7 +7535,7 @@ bool CSymbol::readFromXML(const QDomElement& root)
   {
    CPin *p = new CPin();
    m_Pins.append(p);
-   p->readFromXML(c);
+   p->readFromXML(c,options);
    c = c.nextSiblingElement("pin");
   }
   c = e.firstChildElement("circle");
@@ -6940,7 +7543,7 @@ bool CSymbol::readFromXML(const QDomElement& root)
   {
    CCircle *l = new CCircle();
    m_Circles.append(l);
-   l->readFromXML(c);
+   l->readFromXML(c,options);
    c = c.nextSiblingElement("circle");
   }
   c = e.firstChildElement("rectangle");
@@ -6948,7 +7551,7 @@ bool CSymbol::readFromXML(const QDomElement& root)
   {
    CRectangle *r = new CRectangle();
    m_Rectangles.append(r);
-   r->readFromXML(c);
+   r->readFromXML(c,options);
    c = c.nextSiblingElement("rectangle");
   }
   c = e.firstChildElement("frame");
@@ -6956,7 +7559,7 @@ bool CSymbol::readFromXML(const QDomElement& root)
   {
    CFrame *f = new CFrame();
    m_Frames.append(f);
-   f->readFromXML(c);
+   f->readFromXML(c,options);
    c = c.nextSiblingElement("frame");
   }
   QString s = e.attribute("name");
@@ -6968,44 +7571,44 @@ bool CSymbol::readFromXML(const QDomElement& root)
  return true;
 }
 
-bool CSymbol::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CSymbol::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
   QDomElement e = host.createElement("symbol");
   e.setAttribute("name",m_Name);
-  m_Description.writeToXML(host,e,defaults);
+  m_Description.writeToXML(host,e,options);
   for (int i = 0; i < m_Polygons.size(); i++)
   {
-   m_Polygons[i]->writeToXML(host,e,defaults);
+   m_Polygons[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_Wires.size(); i++)
   {
-   m_Wires[i]->writeToXML(host,e,defaults);
+   m_Wires[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_Texts.size(); i++)
   {
-   m_Texts[i]->writeToXML(host,e,defaults);
+   m_Texts[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_Dimensions.size(); i++)
   {
-   m_Dimensions[i]->writeToXML(host,e,defaults);
+   m_Dimensions[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_Pins.size(); i++)
   {
-   m_Pins[i]->writeToXML(host,e,defaults);
+   m_Pins[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_Circles.size(); i++)
   {
-   m_Circles[i]->writeToXML(host,e,defaults);
+   m_Circles[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_Rectangles.size(); i++)
   {
-   m_Rectangles[i]->writeToXML(host,e,defaults);
+   m_Rectangles[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_Frames.size(); i++)
   {
-   m_Frames[i]->writeToXML(host,e,defaults);
+   m_Frames[i]->writeToXML(host,e,options);
   }
   root.appendChild(e);
   return true;
@@ -7273,7 +7876,7 @@ void CPackage::show(std::ostream& out, const int level)
  out<<"}"<<std::endl;
 }
 
-bool CPackage::readFromXML(const QDomElement& root)
+bool CPackage::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="package") e = e.nextSiblingElement("package");
@@ -7282,14 +7885,14 @@ bool CPackage::readFromXML(const QDomElement& root)
   QDomElement c = e.firstChildElement("description");
   if (!c.isNull())
   {
-   m_Description.readFromXML(c);
+   m_Description.readFromXML(c,options);
   }
   c = e.firstChildElement("polygon");
   while (!c.isNull())
   {
    CPolygon *p = new CPolygon();
    m_Polygons.append(p);
-   p->readFromXML(c);
+   p->readFromXML(c,options);
    c = c.nextSiblingElement("polygon");
   }
   c = e.firstChildElement("wire");
@@ -7297,7 +7900,7 @@ bool CPackage::readFromXML(const QDomElement& root)
   {
    CWire *w = new CWire();
    m_Wires.append(w);
-   w->readFromXML(c);
+   w->readFromXML(c,options);
    c = c.nextSiblingElement("wire");
   }
   c = e.firstChildElement("text");
@@ -7305,7 +7908,7 @@ bool CPackage::readFromXML(const QDomElement& root)
   {
    CText *t = new CText();
    m_Texts.append(t);
-   t->readFromXML(c);
+   t->readFromXML(c,options);
    c = c.nextSiblingElement("text");
   }
   c = e.firstChildElement("dimension");
@@ -7313,7 +7916,7 @@ bool CPackage::readFromXML(const QDomElement& root)
   {
    CDimension *d = new CDimension();
    m_Dimensions.append(d);
-   d->readFromXML(c);
+   d->readFromXML(c,options);
    c = c.nextSiblingElement("dimension");
   }
   c = e.firstChildElement("circle");
@@ -7321,7 +7924,7 @@ bool CPackage::readFromXML(const QDomElement& root)
   {
    CCircle *l = new CCircle();
    m_Circles.append(l);
-   l->readFromXML(c);
+   l->readFromXML(c,options);
    c = c.nextSiblingElement("circle");
   }
   c = e.firstChildElement("rectangle");
@@ -7329,7 +7932,7 @@ bool CPackage::readFromXML(const QDomElement& root)
   {
    CRectangle *r = new CRectangle();
    m_Rectangles.append(r);
-   r->readFromXML(c);
+   r->readFromXML(c,options);
    c = c.nextSiblingElement("rectangle");
   }
   c = e.firstChildElement("frame");
@@ -7337,7 +7940,7 @@ bool CPackage::readFromXML(const QDomElement& root)
   {
    CFrame *f = new CFrame();
    m_Frames.append(f);
-   f->readFromXML(c);
+   f->readFromXML(c,options);
    c = c.nextSiblingElement("frame");
   }
   c = e.firstChildElement("hole");
@@ -7345,7 +7948,7 @@ bool CPackage::readFromXML(const QDomElement& root)
   {
    CHole *h = new CHole();
    m_Holes.append(h);
-   h->readFromXML(c);
+   h->readFromXML(c,options);
    c = c.nextSiblingElement("hole");
   }
   c = e.firstChildElement("pad");
@@ -7353,7 +7956,7 @@ bool CPackage::readFromXML(const QDomElement& root)
   {
    CPad *p = new CPad();
    m_Pads.append(p);
-   p->readFromXML(c);
+   p->readFromXML(c,options);
    c = c.nextSiblingElement("pad");
   }
   c = e.firstChildElement("smd");
@@ -7361,7 +7964,7 @@ bool CPackage::readFromXML(const QDomElement& root)
   {
    CSMD *s = new CSMD();
    m_SMDs.append(s);
-   s->readFromXML(c);
+   s->readFromXML(c,options);
    c = c.nextSiblingElement("smd");
   }
   QString s = e.attribute("name");
@@ -7373,52 +7976,52 @@ bool CPackage::readFromXML(const QDomElement& root)
  return true;
 }
 
-bool CPackage::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CPackage::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
   QDomElement e = host.createElement("package");
   e.setAttribute("name",m_Name);
-  m_Description.writeToXML(host,e,defaults);
+  m_Description.writeToXML(host,e,options);
   for (int i = 0; i < m_Polygons.size(); i++)
   {
-   m_Polygons[i]->writeToXML(host,e,defaults);
+   m_Polygons[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_Wires.size(); i++)
   {
-   m_Wires[i]->writeToXML(host,e,defaults);
+   m_Wires[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_Texts.size(); i++)
   {
-   m_Texts[i]->writeToXML(host,e,defaults);
+   m_Texts[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_Dimensions.size(); i++)
   {
-   m_Dimensions[i]->writeToXML(host,e,defaults);
+   m_Dimensions[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_Circles.size(); i++)
   {
-   m_Circles[i]->writeToXML(host,e,defaults);
+   m_Circles[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_Rectangles.size(); i++)
   {
-   m_Rectangles[i]->writeToXML(host,e,defaults);
+   m_Rectangles[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_Frames.size(); i++)
   {
-   m_Frames[i]->writeToXML(host,e,defaults);
+   m_Frames[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_Holes.size(); i++)
   {
-   m_Holes[i]->writeToXML(host,e,defaults);
+   m_Holes[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_Pads.size(); i++)
   {
-   m_Pads[i]->writeToXML(host,e,defaults);
+   m_Pads[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_SMDs.size(); i++)
   {
-   m_SMDs[i]->writeToXML(host,e,defaults);
+   m_SMDs[i]->writeToXML(host,e,options);
   }
   root.appendChild(e);
   return true;
@@ -7643,7 +8246,7 @@ void CPlain::show(std::ostream& out, const int level)
  CEntity::show(out,level); out<<"}"<<std::endl;
 }
 
-bool CPlain::readFromXML(const QDomElement& root)
+bool CPlain::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="plain") e = e.nextSiblingElement("plain");
@@ -7654,7 +8257,7 @@ bool CPlain::readFromXML(const QDomElement& root)
   {
    CPolygon *p = new CPolygon();
    m_Polygons.append(p);
-   p->readFromXML(c);
+   p->readFromXML(c,options);
    c = c.nextSiblingElement("polygon");
   }
   c = e.firstChildElement("wire");
@@ -7662,7 +8265,7 @@ bool CPlain::readFromXML(const QDomElement& root)
   {
    CWire *w = new CWire();
    m_Wires.append(w);
-   w->readFromXML(c);
+   w->readFromXML(c,options);
    c = c.nextSiblingElement("wire");
   }
   c = e.firstChildElement("text");
@@ -7670,7 +8273,7 @@ bool CPlain::readFromXML(const QDomElement& root)
   {
    CText *t = new CText();
    m_Texts.append(t);
-   t->readFromXML(c);
+   t->readFromXML(c,options);
    c = c.nextSiblingElement("text");
   }
   c = e.firstChildElement("dimension");
@@ -7678,7 +8281,7 @@ bool CPlain::readFromXML(const QDomElement& root)
   {
    CDimension *d = new CDimension();
    m_Dimensions.append(d);
-   d->readFromXML(c);
+   d->readFromXML(c,options);
    c = c.nextSiblingElement("dimension");
   }
   c = e.firstChildElement("circle");
@@ -7686,7 +8289,7 @@ bool CPlain::readFromXML(const QDomElement& root)
   {
    CCircle *l = new CCircle();
    m_Circles.append(l);
-   l->readFromXML(c);
+   l->readFromXML(c,options);
    c = c.nextSiblingElement("circle");
   }
   c = e.firstChildElement("rectangle");
@@ -7694,7 +8297,7 @@ bool CPlain::readFromXML(const QDomElement& root)
   {
    CRectangle *r = new CRectangle();
    m_Rectangles.append(r);
-   r->readFromXML(c);
+   r->readFromXML(c,options);
    c = c.nextSiblingElement("rectangle");
   }
   c = e.firstChildElement("frame");
@@ -7702,7 +8305,7 @@ bool CPlain::readFromXML(const QDomElement& root)
   {
    CFrame *f = new CFrame();
    m_Frames.append(f);
-   f->readFromXML(c);
+   f->readFromXML(c,options);
    c = c.nextSiblingElement("frame");
   }
   c = e.firstChildElement("hole");
@@ -7710,7 +8313,7 @@ bool CPlain::readFromXML(const QDomElement& root)
   {
    CHole *h = new CHole();
    m_Holes.append(h);
-   h->readFromXML(c);
+   h->readFromXML(c,options);
    c = c.nextSiblingElement("hole");
   }
   c = e.firstChildElement("dimension");
@@ -7718,53 +8321,53 @@ bool CPlain::readFromXML(const QDomElement& root)
   {
    CDimension *d = new CDimension();
    m_Dimensions.append(d);
-   d->readFromXML(c);
+   d->readFromXML(c,options);
    c = c.nextSiblingElement("dimension");
   }
  }
  return true;
 }
 
-bool CPlain::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CPlain::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
   QDomElement e = host.createElement("plain");
   for (int i = 0; i < m_Polygons.size(); i++)
   {
-   m_Polygons[i]->writeToXML(host,e,defaults);
+   m_Polygons[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_Wires.size(); i++)
   {
-   m_Wires[i]->writeToXML(host,e,defaults);
+   m_Wires[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_Texts.size(); i++)
   {
-   m_Texts[i]->writeToXML(host,e,defaults);
+   m_Texts[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_Dimensions.size(); i++)
   {
-   m_Dimensions[i]->writeToXML(host,e,defaults);
+   m_Dimensions[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_Circles.size(); i++)
   {
-   m_Circles[i]->writeToXML(host,e,defaults);
+   m_Circles[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_Rectangles.size(); i++)
   {
-   m_Rectangles[i]->writeToXML(host,e,defaults);
+   m_Rectangles[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_Frames.size(); i++)
   {
-   m_Frames[i]->writeToXML(host,e,defaults);
+   m_Frames[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_Holes.size(); i++)
   {
-   m_Holes[i]->writeToXML(host,e,defaults);
+   m_Holes[i]->writeToXML(host,e,options);
   }
   for (int i = 0; i < m_Dimensions.size(); i++)
   {
-   m_Dimensions[i]->writeToXML(host,e,defaults);
+   m_Dimensions[i]->writeToXML(host,e,options);
   }
   root.appendChild(e);
   return true;
@@ -7802,6 +8405,10 @@ void CSheet::clear(void)
  {
   if (0!=m_Instances[i]) delete m_Instances[i];
  }
+ for (int i = 0; i < m_ModuleInstances.size(); i++)
+ {
+  if (0!=m_ModuleInstances[i]) delete m_ModuleInstances[i];
+ }
  for (int i = 0; i < m_Busses.size(); i++)
  {
   if (0!=m_Busses[i]) delete m_Busses[i];
@@ -7811,6 +8418,7 @@ void CSheet::clear(void)
   if (0!=m_Nets[i]) delete m_Nets[i];
  }
  m_Instances.clear();
+ m_ModuleInstances.clear();
  m_Busses.clear();
  m_Nets.clear();
 }
@@ -7824,6 +8432,11 @@ void CSheet::assign(const CSheet& sheet)
  {
   CInstance *n = new CInstance(*sheet.m_Instances.at(i));
   m_Instances.append(n);
+ }
+ for (int i = 0; i < sheet.m_ModuleInstances.size(); i++)
+ {
+  CModuleInstance *n = new CModuleInstance(*sheet.m_ModuleInstances.at(i));
+  m_ModuleInstances.append(n);
  }
  for (int i = 0; i < sheet.m_Busses.size(); i++)
  {
@@ -7843,6 +8456,10 @@ void CSheet::scale(const double factor)
  for (int i = 0; i < m_Instances.size(); i++)
  {
   m_Instances[i]->scale(factor);
+ }
+ for (int i = 0; i < m_ModuleInstances.size(); i++)
+ {
+  m_ModuleInstances[i]->scale(factor);
  }
  for (int i = 0; i < m_Busses.size(); i++)
  {
@@ -7867,6 +8484,13 @@ void CSheet::show(std::ostream& out, const int level)
   m_Instances[i]->show(out,level+2);
  }
  CEntity::show(out,level); out<<"\t}"<<std::endl;
+ CEntity::show(out,level); out<<"\tModuleInstances="<<std::endl;
+ CEntity::show(out,level); out<<"\t{"<<std::endl;
+ for (int i = 0; i < m_ModuleInstances.size(); i++)
+ {
+  m_ModuleInstances[i]->show(out,level+2);
+ }
+ CEntity::show(out,level); out<<"\t}"<<std::endl;
  CEntity::show(out,level); out<<"\tBusses="<<std::endl;
  CEntity::show(out,level); out<<"\t{"<<std::endl;
  for (int i = 0; i < m_Busses.size(); i++)
@@ -7884,7 +8508,7 @@ void CSheet::show(std::ostream& out, const int level)
  CEntity::show(out,level); out<<"}"<<std::endl;
 }
 
-bool CSheet::readFromXML(const QDomElement& root)
+bool CSheet::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="sheet") e = e.nextSiblingElement("sheet");
@@ -7893,12 +8517,12 @@ bool CSheet::readFromXML(const QDomElement& root)
   QDomElement c = e.firstChildElement("description");
   if (!c.isNull())
   {
-   m_Description.readFromXML(c);
+   m_Description.readFromXML(c,options);
   }
   c = e.firstChildElement("plain");
   if (!c.isNull())
   {
-   m_Plain.readFromXML(c);
+   m_Plain.readFromXML(c,options);
   }
   c = e.firstChildElement("instances");
   if (!c.isNull())
@@ -7908,8 +8532,23 @@ bool CSheet::readFromXML(const QDomElement& root)
    {
     CInstance *i = new CInstance();
     m_Instances.append(i);
-    i->readFromXML(cc);
+    i->readFromXML(cc,options);
     cc = cc.nextSiblingElement("instance");
+   }
+  }
+  //if (options.version()>=CVersionNumber(7,0))
+  {
+   c = e.firstChildElement("moduleinsts");
+   if (!c.isNull())
+   {
+    QDomElement cc = c.firstChildElement("moduleinst");
+    while (!cc.isNull())
+    {
+     CModuleInstance *mi = new CModuleInstance();
+     m_ModuleInstances.append(mi);
+     mi->readFromXML(cc,options);
+     cc = cc.nextSiblingElement("moduleinst");
+    }
    }
   }
   c = e.firstChildElement("busses");
@@ -7920,7 +8559,7 @@ bool CSheet::readFromXML(const QDomElement& root)
    {
     CBus *b = new CBus();
     m_Busses.append(b);
-    b->readFromXML(cc);
+    b->readFromXML(cc,options);
     cc = cc.nextSiblingElement("bus");
    }
   }
@@ -7932,7 +8571,7 @@ bool CSheet::readFromXML(const QDomElement& root)
    {
     CNet *n = new CNet();
     m_Nets.append(n);
-    n->readFromXML(cc);
+    n->readFromXML(cc,options);
     cc = cc.nextSiblingElement("net");
    }
   }
@@ -7940,30 +8579,39 @@ bool CSheet::readFromXML(const QDomElement& root)
  return true;
 }
 
-bool CSheet::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CSheet::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
   QDomElement e = host.createElement("sheet");
-  m_Description.writeToXML(host,e,defaults);
-  m_Plain.writeToXML(host,e,defaults);
+  m_Description.writeToXML(host,e,options);
+  m_Plain.writeToXML(host,e,options);
   QDomElement c = host.createElement("instances");
   e.appendChild(c);
   for (int i = 0; i < m_Instances.size(); i++)
   {
-   m_Instances[i]->writeToXML(host,c,defaults);
+   m_Instances[i]->writeToXML(host,c,options);
+  }
+  if (options.version()>=CVersionNumber(7,0))
+  {
+   c = host.createElement("moduleinsts");
+   e.appendChild(c);
+   for (int i = 0; i < m_ModuleInstances.size(); i++)
+   {
+    m_ModuleInstances[i]->writeToXML(host,c,options);
+   }
   }
   c = host.createElement("busses");
   e.appendChild(c);
   for (int i = 0; i < m_Busses.size(); i++)
   {
-   m_Busses[i]->writeToXML(host,c,defaults);
+   m_Busses[i]->writeToXML(host,c,options);
   }
   c = host.createElement("nets");
   e.appendChild(c);
   for (int i = 0; i < m_Nets.size(); i++)
   {
-   m_Nets[i]->writeToXML(host,c,defaults);
+   m_Nets[i]->writeToXML(host,c,options);
   }
   root.appendChild(e);
   return true;
@@ -8091,7 +8739,7 @@ void CLibrary::show(std::ostream& out, const int level)
  CEntity::show(out,level); out<<"}"<<std::endl;
 }
 
-bool CLibrary::readFromXML(const QDomElement& root)
+bool CLibrary::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  bool result = false;
  QDomElement e = root;
@@ -8102,7 +8750,7 @@ bool CLibrary::readFromXML(const QDomElement& root)
   QDomElement c = e.firstChildElement("description");
   if (!c.isNull())
   {
-   /*result &=*/ m_Description.readFromXML(c);
+   /*result &=*/ m_Description.readFromXML(c,options);
   }
   c = e.firstChildElement("packages");
   if (!c.isNull())
@@ -8112,7 +8760,7 @@ bool CLibrary::readFromXML(const QDomElement& root)
    {
     CPackage *p = new CPackage();
     m_Packages.append(p);
-    result &= p->readFromXML(cc);
+    result &= p->readFromXML(cc,options);
     cc = cc.nextSiblingElement("package");
    }
   }
@@ -8124,7 +8772,7 @@ bool CLibrary::readFromXML(const QDomElement& root)
    {
     CSymbol *s = new CSymbol();
     m_Symbols.append(s);
-    result &= s->readFromXML(cc);
+    result &= s->readFromXML(cc,options);
     cc = cc.nextSiblingElement("symbol");
    }
   }
@@ -8136,7 +8784,7 @@ bool CLibrary::readFromXML(const QDomElement& root)
    {
     CDeviceSet *d = new CDeviceSet();
     m_DeviceSets.append(d);
-    result &= d->readFromXML(cc);
+    result &= d->readFromXML(cc,options);
     cc = cc.nextSiblingElement("deviceset");
    }
   }
@@ -8149,30 +8797,30 @@ bool CLibrary::readFromXML(const QDomElement& root)
  return result;
 }
 
-bool CLibrary::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CLibrary::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
   QDomElement e = host.createElement("library");
   e.setAttribute("name",m_Name);
-  m_Description.writeToXML(host,e,defaults);
+  m_Description.writeToXML(host,e,options);
   QDomElement c = host.createElement("packages");
   e.appendChild(c);
   for (int i = 0; i < m_Packages.size(); i++)
   {
-   m_Packages[i]->writeToXML(host,c,defaults);
+   m_Packages[i]->writeToXML(host,c,options);
   }
   c = host.createElement("symbols");
   e.appendChild(c);
   for (int i = 0; i < m_Symbols.size(); i++)
   {
-   m_Symbols[i]->writeToXML(host,c,defaults);
+   m_Symbols[i]->writeToXML(host,c,options);
   }
   c = host.createElement("devicesets");
   e.appendChild(c);
   for (int i = 0; i < m_DeviceSets.size(); i++)
   {
-   m_DeviceSets[i]->writeToXML(host,c,defaults);
+   m_DeviceSets[i]->writeToXML(host,c,options);
   }
   root.appendChild(e);
   return true;
@@ -8304,6 +8952,7 @@ void CBoard::clear(void)
  m_Elements.clear();
  m_Signals.clear();
  m_Errors.clear();
+ m_LimitedWidth = 0.0;
 }
 
 void CBoard::assign(const CBoard& board)
@@ -8354,6 +9003,7 @@ void CBoard::assign(const CBoard& board)
   CApproved *a = new CApproved(*board.m_Errors.at(i));
   m_Errors.append(a);
  }
+ m_LimitedWidth = board.m_LimitedWidth;
 }
 
 void CBoard::scale(const double factor)
@@ -8376,6 +9026,7 @@ void CBoard::scale(const double factor)
  {
   m_Signals[i]->scale(factor);
  }
+ m_LimitedWidth *= factor;
 }
 
 void CBoard::show(std::ostream& out, const int level)
@@ -8450,24 +9101,32 @@ void CBoard::show(std::ostream& out, const int level)
   m_Errors[i]->show(out,level+2);
  }
  CEntity::show(out,level); out<<"\t}"<<std::endl;
+ CEntity::show(out,level); out<<"LimitedWidth="<<m_LimitedWidth<<std::endl;
  CEntity::show(out,level); out<<"}"<<std::endl;
 }
 
-bool CBoard::readFromXML(const QDomElement& root)
+bool CBoard::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="board") e = e.nextSiblingElement("board");
  if (!e.isNull())
  {
+  QString s = e.attribute("limitedwidth");
+  if (!s.isEmpty())
+  {
+   bool ok = false;
+   double value = s.toDouble(&ok);
+   if (ok) { m_LimitedWidth = value; }
+  }
   QDomElement c = e.firstChildElement("description");
   if (!c.isNull())
   {
-   m_Description.readFromXML(c);
+   m_Description.readFromXML(c,options);
   }
   c = e.firstChildElement("plain");
   if (!c.isNull())
   {
-   m_Plain.readFromXML(c);
+   m_Plain.readFromXML(c,options);
   }
   c = e.firstChildElement("libraries");
   if (!c.isNull())
@@ -8477,7 +9136,7 @@ bool CBoard::readFromXML(const QDomElement& root)
    {
     CLibrary *l = new CLibrary();
     m_Libraries.append(l);
-    l->readFromXML(cc);
+    l->readFromXML(cc,options);
     cc = cc.nextSiblingElement("library");
    }
   }
@@ -8489,7 +9148,7 @@ bool CBoard::readFromXML(const QDomElement& root)
    {
     CAttribute *a = new CAttribute();
     m_Attributes.append(a);
-    a->readFromXML(cc);
+    a->readFromXML(cc,options);
     cc = cc.nextSiblingElement("attribute");
    }
   }
@@ -8501,7 +9160,7 @@ bool CBoard::readFromXML(const QDomElement& root)
    {
     CVariantDef *v = new CVariantDef();
     m_VariantDefs.append(v);
-    v->readFromXML(cc);
+    v->readFromXML(cc,options);
     cc = cc.nextSiblingElement("variantdef");
    }
   }
@@ -8513,21 +9172,21 @@ bool CBoard::readFromXML(const QDomElement& root)
    {
     CClass *l = new CClass();
     m_Classes.append(l);
-    l->readFromXML(cc);
+    l->readFromXML(cc,options);
     cc = cc.nextSiblingElement("class");
    }
   }
   c = e.firstChildElement("designrules");
   if (!c.isNull())
   {
-   m_DesignRules.readFromXML(c);
+   m_DesignRules.readFromXML(c,options);
    /*
    QDomElement cc = c.firstChildElement("designrule");
    while (!cc.isNull())
    {
     CDesignRule *r = new CDesignRule();
     m_DesignRules.append(r);
-    r->readFromXML(cc);
+    r->readFromXML(cc,options);
     cc = cc.nextSiblingElement("designrule");
    }
    */
@@ -8540,7 +9199,7 @@ bool CBoard::readFromXML(const QDomElement& root)
    {
     CPass *p = new CPass();
     m_Passes.append(p);
-    p->readFromXML(cc);
+    p->readFromXML(cc,options);
     cc = cc.nextSiblingElement("pass");
    }
   }
@@ -8552,7 +9211,7 @@ bool CBoard::readFromXML(const QDomElement& root)
    {
     CElement *m = new CElement();
     m_Elements.append(m);
-    m->readFromXML(cc);
+    m->readFromXML(cc,options);
     cc = cc.nextSiblingElement("element");
    }
   }
@@ -8564,7 +9223,7 @@ bool CBoard::readFromXML(const QDomElement& root)
    {
     CSignal *n = new CSignal();
     m_Signals.append(n);
-    n->readFromXML(cc);
+    n->readFromXML(cc,options);
     cc = cc.nextSiblingElement("signal");
    }
   }
@@ -8576,7 +9235,7 @@ bool CBoard::readFromXML(const QDomElement& root)
    {
     CApproved *a = new CApproved();
     m_Errors.append(a);
-    a->readFromXML(cc);
+    a->readFromXML(cc,options);
     cc = cc.nextSiblingElement("approved");
    }
   }
@@ -8584,74 +9243,351 @@ bool CBoard::readFromXML(const QDomElement& root)
  return true;
 }
 
-bool CBoard::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CBoard::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
   QDomElement e = host.createElement("board");
-  m_Description.writeToXML(host,e,defaults);
-  m_Plain.writeToXML(host,e,defaults);
+  m_Description.writeToXML(host,e,options);
+  m_Plain.writeToXML(host,e,options);
   QDomElement c = host.createElement("libraries");
   e.appendChild(c);
   for (int i = 0; i < m_Libraries.size(); i++)
   {
-   m_Libraries[i]->writeToXML(host,c,defaults);
+   m_Libraries[i]->writeToXML(host,c,options);
   }
   c = host.createElement("attributes");
   e.appendChild(c);
   for (int i = 0; i < m_Attributes.size(); i++)
   {
-   m_Attributes[i]->writeToXML(host,c,defaults);
+   m_Attributes[i]->writeToXML(host,c,options);
   }
   c = host.createElement("variantdefs");
   e.appendChild(c);
   for (int i = 0; i < m_VariantDefs.size(); i++)
   {
-   m_VariantDefs[i]->writeToXML(host,c,defaults);
+   m_VariantDefs[i]->writeToXML(host,c,options);
   }
   c = host.createElement("classes");
   e.appendChild(c);
   for (int i = 0; i < m_Classes.size(); i++)
   {
-   m_Classes[i]->writeToXML(host,c,defaults);
+   m_Classes[i]->writeToXML(host,c,options);
   }
   c = host.createElement("designrules");
-  m_DesignRules.writeToXML(host,c,defaults);
+  m_DesignRules.writeToXML(host,c,options);
   e.appendChild(c);
   /*
   for (int i = 0; i < m_DesignRules.size(); i++)
   {
-   m_DesignRules[i]->writeToXML(host,c,defaults);
+   m_DesignRules[i]->writeToXML(host,c,options);
   }
   */
   c = host.createElement("autorouter");
   e.appendChild(c);
   for (int i = 0; i < m_Passes.size(); i++)
   {
-   m_Passes[i]->writeToXML(host,c,defaults);
+   m_Passes[i]->writeToXML(host,c,options);
   }
   c = host.createElement("elements");
   e.appendChild(c);
   for (int i = 0; i < m_Elements.size(); i++)
   {
-   m_Elements[i]->writeToXML(host,c,defaults);
+   m_Elements[i]->writeToXML(host,c,options);
   }
   c = host.createElement("signals");
   e.appendChild(c);
   for (int i = 0; i < m_Signals.size(); i++)
   {
-   m_Signals[i]->writeToXML(host,c,defaults);
+   m_Signals[i]->writeToXML(host,c,options);
   }
   c = host.createElement("errors");
   e.appendChild(c);
   for (int i = 0; i < m_Errors.size(); i++)
   {
-   m_Errors[i]->writeToXML(host,c,defaults);
+   m_Errors[i]->writeToXML(host,c,options);
+  }
+  if (options.version()>=CVersionNumber(7,4))
+  {
+   if (options.writeDefaults() || 0.0!=m_LimitedWidth)
+   {
+    e.setAttribute("limitedwidth",m_LimitedWidth);
+   }
   }
   root.appendChild(e);
   return true;
  }
  return false;
+}
+
+//------------------------------------------------------------------------------
+
+CModule::CModule(const CModule& module)
+{
+ assign(module);
+}
+
+CModule::CModule(void)
+{
+ clear();
+}
+
+CModule::~CModule(void)
+{
+ clear();
+}
+
+void CModule::operator =(const CModule& module)
+{
+ assign(module);
+}
+
+void CModule::clear(void)
+{
+ m_Name.clear();
+ m_Prefix.clear();
+ m_DX = 0.8; m_DY = 0.6; // inch
+ m_Description.clear();
+ for (int i = 0; i < m_Ports.size(); i++)
+ {
+  if (0!=m_Ports[i]) delete m_Ports[i];
+ }
+ for (int i = 0; i < m_VariantDefs.size(); i++)
+ {
+  if (0!=m_VariantDefs[i]) delete m_VariantDefs[i];
+ }
+ for (int i = 0; i < m_Parts.size(); i++)
+ {
+  if (0!=m_Parts[i]) delete m_Parts[i];
+ }
+ for (int i = 0; i < m_Sheets.size(); i++)
+ {
+  if (0!=m_Sheets[i]) delete m_Sheets[i];
+ }
+ m_Ports.clear();
+ m_VariantDefs.clear();
+ m_Parts.clear();
+ m_Sheets.clear();
+}
+
+void CModule::assign(const CModule& module)
+{
+ clear();
+ m_Name = module.m_Name;
+ m_Prefix = module.m_Prefix;
+ m_DX = module.m_DX; m_DY = module.m_DY;
+ m_Description = module.m_Description;
+ for (int i = 0; i < module.m_Ports.size(); i++)
+ {
+  CPort *p = new CPort(*module.m_Ports.at(i));
+  m_Ports.append(p);
+ }
+ for (int i = 0; i < module.m_VariantDefs.size(); i++)
+ {
+  CVariantDef *v = new CVariantDef(*module.m_VariantDefs.at(i));
+  m_VariantDefs.append(v);
+ }
+ for (int i = 0; i < module.m_Parts.size(); i++)
+ {
+  CPart *p = new CPart(*module.m_Parts.at(i));
+  m_Parts.append(p);
+ }
+ for (int i = 0; i < module.m_Sheets.size(); i++)
+ {
+  CSheet *s = new CSheet(*module.m_Sheets.at(i));
+  m_Sheets.append(s);
+ }
+}
+
+void CModule::scale(const double factor)
+{
+ for (int i = 0; i < m_Ports.size(); i++)
+ {
+  m_Ports[i]->scale(factor);
+ }
+ for (int i = 0; i < m_Parts.size(); i++)
+ {
+  m_Parts[i]->scale(factor);
+ }
+ for (int i = 0; i < m_Sheets.size(); i++)
+ {
+  m_Sheets[i]->scale(factor);
+ }
+}
+
+void CModule::show(std::ostream& out, const int level)
+{
+ CEntity::show(out,level); out<<"Schematic:"<<std::endl;
+ CEntity::show(out,level); out<<"{"<<std::endl;
+ CEntity::show(out,level); out<<"\tName='"<<m_Name.toUtf8().data()
+  <<"', Prefix='"<<m_Prefix.toUtf8().data()
+  <<"', DX="<<m_DX<<", DY="<<m_DY<<std::endl;
+ m_Description.show(out,level+1);
+ CEntity::show(out,level); out<<"\tVariantDefs="<<std::endl;
+ CEntity::show(out,level); out<<"\t{"<<std::endl;
+ for (int i = 0; i < m_VariantDefs.size(); i++)
+ {
+  m_VariantDefs[i]->show(out,level+2);
+ }
+ CEntity::show(out,level); out<<"\t}"<<std::endl;
+ CEntity::show(out,level); out<<"\tParts="<<std::endl;
+ CEntity::show(out,level); out<<"\t{"<<std::endl;
+ for (int i = 0; i < m_Parts.size(); i++)
+ {
+  m_Parts[i]->show(out,level+2);
+ }
+ CEntity::show(out,level); out<<"\t}"<<std::endl;
+ CEntity::show(out,level); out<<"\tSheets="<<std::endl;
+ CEntity::show(out,level); out<<"\t{"<<std::endl;
+ for (int i = 0; i < m_Sheets.size(); i++)
+ {
+  m_Sheets[i]->show(out,level+2);
+ }
+ CEntity::show(out,level); out<<"\t}"<<std::endl;
+ CEntity::show(out,level); out<<"}"<<std::endl;
+}
+
+bool CModule::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
+{
+ QDomElement e = root;
+ if (e.nodeName()!="module") e = e.nextSiblingElement("module");
+ if (!e.isNull())
+ {
+  QString s = e.attribute("name");
+  if (!s.isEmpty())
+  {
+   m_Name = s;
+  }
+  s = e.attribute("prefix");
+  if (!s.isEmpty())
+  {
+   m_Prefix = s;
+  }
+  s = e.attribute("dx");
+  if (!s.isEmpty())
+  {
+   bool ok = false;
+   double value = s.toDouble(&ok);
+   if (ok) { m_DX = value; }
+  }
+  s = e.attribute("dy");
+  if (!s.isEmpty())
+  {
+   bool ok = false;
+   double value = s.toDouble(&ok);
+   if (ok) { m_DY = value; }
+  }
+  //
+  QDomElement c = e.firstChildElement("description");
+  if (!c.isNull())
+  {
+   m_Description.readFromXML(c,options);
+  }
+  c = e.firstChildElement("ports");
+  if (!c.isNull())
+  {
+   QDomElement cc = c.firstChildElement("port");
+   while (!cc.isNull())
+   {
+    CPort *p = new CPort();
+    m_Ports.append(p);
+    p->readFromXML(cc,options);
+    cc = cc.nextSiblingElement("port");
+   }
+  }
+  c = e.firstChildElement("variantdefs");
+  if (!c.isNull())
+  {
+   QDomElement cc = c.firstChildElement("variantdef");
+   while (!cc.isNull())
+   {
+    CVariantDef *v = new CVariantDef();
+    m_VariantDefs.append(v);
+    v->readFromXML(cc,options);
+    cc = cc.nextSiblingElement("variantdef");
+   }
+  }
+  c = e.firstChildElement("parts");
+  if (!c.isNull())
+  {
+   QDomElement cc = c.firstChildElement("part");
+   while (!cc.isNull())
+   {
+    CPart *p = new CPart();
+    m_Parts.append(p);
+    p->readFromXML(cc,options);
+    cc = cc.nextSiblingElement("part");
+   }
+  }
+  c = e.firstChildElement("sheets");
+  if (!c.isNull())
+  {
+   QDomElement cc = c.firstChildElement("sheet");
+   while (!cc.isNull())
+   {
+    CSheet *h = new CSheet();
+    m_Sheets.append(h);
+    h->readFromXML(cc,options);
+    cc = cc.nextSiblingElement("sheet");
+   }
+  }
+ }
+ return true;
+}
+
+bool CModule::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
+{
+ if (!host.isNull() && !root.isNull())
+ {
+  QDomElement e = host.createElement("module");
+  e.setAttribute("name",m_Name);
+  e.setAttribute("prefix",m_Prefix);
+  e.setAttribute("dx",m_DX);
+  e.setAttribute("dy",m_DY);
+  m_Description.writeToXML(host,e,options);
+  QDomElement c = host.createElement("ports");
+  e.appendChild(c);
+  for (int i = 0; i < m_Ports.size(); i++)
+  {
+   m_Ports[i]->writeToXML(host,c,options);
+  }
+  c = host.createElement("variantdefs");
+  e.appendChild(c);
+  for (int i = 0; i < m_VariantDefs.size(); i++)
+  {
+   m_VariantDefs[i]->writeToXML(host,c,options);
+  }
+  c = host.createElement("parts");
+  e.appendChild(c);
+  for (int i = 0; i < m_Parts.size(); i++)
+  {
+   m_Parts[i]->writeToXML(host,c,options);
+  }
+  c = host.createElement("sheets");
+  e.appendChild(c);
+  for (int i = 0; i < m_Sheets.size(); i++)
+  {
+   m_Sheets[i]->writeToXML(host,c,options);
+  }
+  root.appendChild(e);
+  return true;
+ }
+ return false;
+}
+
+CPart *CModule::findPartByName(const QString& name)
+{
+ CPart *result = 0;
+ for (int i = 0; i < m_Parts.size(); i++)
+ {
+  CPart *p = m_Parts.at(i);
+  if (p->name()==name)
+  {
+   result = p;
+   break;
+  }
+ }
+ return result;
 }
 
 //------------------------------------------------------------------------------
@@ -8695,6 +9631,10 @@ void CSchematic::clear(void)
  {
   if (0!=m_Classes[i]) delete m_Classes[i];
  }
+ for (int i = 0; i < m_Modules.size(); i++)
+ {
+  if (0!=m_Modules[i]) delete m_Modules[i];
+ }
  for (int i = 0; i < m_Parts.size(); i++)
  {
   if (0!=m_Parts[i]) delete m_Parts[i];
@@ -8711,6 +9651,7 @@ void CSchematic::clear(void)
  m_Attributes.clear();
  m_VariantDefs.clear();
  m_Classes.clear();
+ m_Modules.clear();
  m_Parts.clear();
  m_Sheets.clear();
  m_Errors.clear();
@@ -8742,6 +9683,11 @@ void CSchematic::assign(const CSchematic& schematic)
   CClass *c = new CClass(*schematic.m_Classes.at(i));
   m_Classes.append(c);
  }
+ for (int i = 0; i < schematic.m_Modules.size(); i++)
+ {
+  CModule *c = new CModule(*schematic.m_Modules.at(i));
+  m_Modules.append(c);
+ }
  for (int i = 0; i < schematic.m_Parts.size(); i++)
  {
   CPart *p = new CPart(*schematic.m_Parts.at(i));
@@ -8770,6 +9716,10 @@ void CSchematic::scale(const double factor)
  for (int i = 0; i < m_Attributes.size(); i++)
  {
   m_Attributes[i]->scale(factor);
+ }
+ for (int i = 0; i < m_Modules.size(); i++)
+ {
+  m_Modules[i]->scale(factor);
  }
  for (int i = 0; i < m_Parts.size(); i++)
  {
@@ -8824,6 +9774,13 @@ void CSchematic::show(std::ostream& out, const int level)
   m_Classes[i]->show(out,level+2);
  }
  CEntity::show(out,level); out<<"\t}"<<std::endl;
+ CEntity::show(out,level); out<<"\tModules="<<std::endl;
+ CEntity::show(out,level); out<<"\t{"<<std::endl;
+ for (int i = 0; i < m_Modules.size(); i++)
+ {
+  m_Modules[i]->show(out,level+2);
+ }
+ CEntity::show(out,level); out<<"\t}"<<std::endl;
  CEntity::show(out,level); out<<"\tParts="<<std::endl;
  CEntity::show(out,level); out<<"\t{"<<std::endl;
  for (int i = 0; i < m_Parts.size(); i++)
@@ -8848,7 +9805,7 @@ void CSchematic::show(std::ostream& out, const int level)
  CEntity::show(out,level); out<<"}"<<std::endl;
 }
 
-bool CSchematic::readFromXML(const QDomElement& root)
+bool CSchematic::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="schematic") e = e.nextSiblingElement("schematic");
@@ -8857,7 +9814,7 @@ bool CSchematic::readFromXML(const QDomElement& root)
   QDomElement c = e.firstChildElement("description");
   if (!c.isNull())
   {
-   m_Description.readFromXML(c);
+   m_Description.readFromXML(c,options);
   }
   c = e.firstChildElement("libraries");
   if (!c.isNull())
@@ -8867,7 +9824,7 @@ bool CSchematic::readFromXML(const QDomElement& root)
    {
     CLibrary *l = new CLibrary();
     m_Libraries.append(l);
-    l->readFromXML(cc);
+    l->readFromXML(cc,options);
     cc = cc.nextSiblingElement("library");
    }
   }
@@ -8879,7 +9836,7 @@ bool CSchematic::readFromXML(const QDomElement& root)
    {
     CAttribute *a = new CAttribute();
     m_Attributes.append(a);
-    a->readFromXML(cc);
+    a->readFromXML(cc,options);
     cc = cc.nextSiblingElement("attribute");
    }
   }
@@ -8891,7 +9848,7 @@ bool CSchematic::readFromXML(const QDomElement& root)
    {
     CVariantDef *v = new CVariantDef();
     m_VariantDefs.append(v);
-    v->readFromXML(cc);
+    v->readFromXML(cc,options);
     cc = cc.nextSiblingElement("variantdef");
    }
   }
@@ -8903,8 +9860,20 @@ bool CSchematic::readFromXML(const QDomElement& root)
    {
     CClass *l = new CClass();
     m_Classes.append(l);
-    l->readFromXML(cc);
+    l->readFromXML(cc,options);
     cc = cc.nextSiblingElement("class");
+   }
+  }
+  c = e.firstChildElement("modules");
+  if (!c.isNull())
+  {
+   QDomElement cc = c.firstChildElement("module");
+   while (!cc.isNull())
+   {
+    CModule *m = new CModule();
+    m_Modules.append(m);
+    m->readFromXML(cc,options);
+    cc = cc.nextSiblingElement("module");
    }
   }
   c = e.firstChildElement("parts");
@@ -8915,7 +9884,7 @@ bool CSchematic::readFromXML(const QDomElement& root)
    {
     CPart *p = new CPart();
     m_Parts.append(p);
-    p->readFromXML(cc);
+    p->readFromXML(cc,options);
     cc = cc.nextSiblingElement("part");
    }
   }
@@ -8927,7 +9896,7 @@ bool CSchematic::readFromXML(const QDomElement& root)
    {
     CSheet *h = new CSheet();
     m_Sheets.append(h);
-    h->readFromXML(cc);
+    h->readFromXML(cc,options);
     cc = cc.nextSiblingElement("sheet");
    }
   }
@@ -8939,16 +9908,16 @@ bool CSchematic::readFromXML(const QDomElement& root)
    {
     CApproved *a = new CApproved();
     m_Errors.append(a);
-    a->readFromXML(cc);
+    a->readFromXML(cc,options);
     cc = cc.nextSiblingElement("approved");
    }
   }
-  QString s = c.attribute("xreflabel");
+  QString s = e.attribute("xreflabel");
   if (!s.isEmpty())
   {
    m_XRefLabel = s;
   }
-  s = c.attribute("xrefpart");
+  s = e.attribute("xrefpart");
   if (!s.isEmpty())
   {
    m_XRefPart = s;
@@ -8957,55 +9926,64 @@ bool CSchematic::readFromXML(const QDomElement& root)
  return true;
 }
 
-bool CSchematic::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CSchematic::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
   QDomElement e = host.createElement("schematic");
   e.setAttribute("xreflabel",m_XRefLabel);
   e.setAttribute("xrefpart",m_XRefPart);
-  m_Description.writeToXML(host,e,defaults);
+  m_Description.writeToXML(host,e,options);
   QDomElement c = host.createElement("libraries");
   e.appendChild(c);
   for (int i = 0; i < m_Libraries.size(); i++)
   {
-   m_Libraries[i]->writeToXML(host,c,defaults);
+   m_Libraries[i]->writeToXML(host,c,options);
   }
   c = host.createElement("attributes");
   e.appendChild(c);
   for (int i = 0; i < m_Attributes.size(); i++)
   {
-   m_Attributes[i]->writeToXML(host,c,defaults);
+   m_Attributes[i]->writeToXML(host,c,options);
   }
   c = host.createElement("variantdefs");
   e.appendChild(c);
   for (int i = 0; i < m_VariantDefs.size(); i++)
   {
-   m_VariantDefs[i]->writeToXML(host,c,defaults);
+   m_VariantDefs[i]->writeToXML(host,c,options);
   }
   c = host.createElement("classes");
   e.appendChild(c);
   for (int i = 0; i < m_Classes.size(); i++)
   {
-   m_Classes[i]->writeToXML(host,c,defaults);
+   m_Classes[i]->writeToXML(host,c,options);
+  }
+  if (options.version()>=CVersionNumber(7,0))
+  {
+   c = host.createElement("modules");
+   e.appendChild(c);
+   for (int i = 0; i < m_Modules.size(); i++)
+   {
+    m_Modules[i]->writeToXML(host,c,options);
+   }
   }
   c = host.createElement("parts");
   e.appendChild(c);
   for (int i = 0; i < m_Parts.size(); i++)
   {
-   m_Parts[i]->writeToXML(host,c,defaults);
+   m_Parts[i]->writeToXML(host,c,options);
   }
   c = host.createElement("sheets");
   e.appendChild(c);
   for (int i = 0; i < m_Sheets.size(); i++)
   {
-   m_Sheets[i]->writeToXML(host,c,defaults);
+   m_Sheets[i]->writeToXML(host,c,options);
   }
   c = host.createElement("errors");
   e.appendChild(c);
   for (int i = 0; i < m_Errors.size(); i++)
   {
-   m_Errors[i]->writeToXML(host,c,defaults);
+   m_Errors[i]->writeToXML(host,c,options);
   }
   root.appendChild(e);
   return true;
@@ -9163,6 +10141,7 @@ void CDrawing::initDefaultLayers()
  m_Layers.append(new CLayer(CLayer::LAYER_REFERENCE,CLayer::layerName(CLayer::LAYER_REFERENCE), 7, 1, true, true));
  m_Layers.append(new CLayer(CLayer::LAYER_TDOCU,CLayer::layerName(CLayer::LAYER_TDOCU), 7, 1, true, true));
  m_Layers.append(new CLayer(CLayer::LAYER_BDOCU,CLayer::layerName(CLayer::LAYER_BDOCU), 7, 1, true, true));
+ m_Layers.append(new CLayer(CLayer::LAYER_MODULES,CLayer::layerName(CLayer::LAYER_MODULES), 5, 1, true, true));
  m_Layers.append(new CLayer(CLayer::LAYER_NETS,CLayer::layerName(CLayer::LAYER_NETS), 7, 1, true, true));
  m_Layers.append(new CLayer(CLayer::LAYER_BUSSES,CLayer::layerName(CLayer::LAYER_BUSSES), 7, 1, true, true));
  m_Layers.append(new CLayer(CLayer::LAYER_PINS,CLayer::layerName(CLayer::LAYER_PINS), 2, 1, false, true));
@@ -9211,7 +10190,7 @@ void CDrawing::show(std::ostream& out, const int level)
  CEntity::show(out,level); out<<"}"<<std::endl;
 }
 
-bool CDrawing::readFromXML(const QDomElement &root)
+bool CDrawing::readFromXML(const QDomElement &root, const CEagleDocumentOptions& options)
 {
  bool result = true;
  QDomElement e = root;
@@ -9221,12 +10200,12 @@ bool CDrawing::readFromXML(const QDomElement &root)
   QDomElement c = e.firstChildElement("settings");
   if (!c.isNull())
   {
-   result &= m_Settings.readFromXML(c);
+   result &= m_Settings.readFromXML(c,options);
   }
   c = e.firstChildElement("grid");
   if (!c.isNull())
   {
-   result &= m_Grid.readFromXML(c);
+   result &= m_Grid.readFromXML(c,options);
   }
   c = e.firstChildElement("layers");
   if (!c.isNull())
@@ -9236,7 +10215,7 @@ bool CDrawing::readFromXML(const QDomElement &root)
    {
     CLayer *l = new CLayer();
     m_Layers.append(l);
-    result &= l->readFromXML(cc);
+    result &= l->readFromXML(cc,options);
     cc = cc.nextSiblingElement("layer");
    }
   }
@@ -9244,21 +10223,21 @@ bool CDrawing::readFromXML(const QDomElement &root)
   c = e.firstChildElement("library");
   if (!c.isNull())
   {
-   result &= m_Library.readFromXML(c);
+   result &= m_Library.readFromXML(c,options);
    is_library = true;
   }
   bool is_schematic = false;
   c = e.firstChildElement("schematic");
   if (!c.isNull())
   {
-   result &= m_Schematic.readFromXML(c);
+   result &= m_Schematic.readFromXML(c,options);
    is_schematic = true;
   }
   bool is_board = false;
   c = e.firstChildElement("board");
   if (!c.isNull())
   {
-   result &= m_Board.readFromXML(c);
+   result &= m_Board.readFromXML(c,options);
    is_board = true;
   }
   if (is_library && !is_schematic && !is_board) m_Mode = CDrawing::dmLibrary;
@@ -9269,30 +10248,31 @@ bool CDrawing::readFromXML(const QDomElement &root)
  return result;
 }
 
-bool CDrawing::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CDrawing::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
   QDomElement e = host.createElement("drawing");
-  m_Settings.writeToXML(host,e,defaults);
-  m_Grid.writeToXML(host,e,defaults);
+  m_Settings.writeToXML(host,e,options);
+  m_Grid.writeToXML(host,e,options);
   QDomElement c = host.createElement("layers");
   e.appendChild(c);
   for (int i = 0; i < m_Layers.size(); i++)
   {
-   m_Layers[i]->writeToXML(host,c,defaults);
+   if ((CLayer::LAYER_MODULES==m_Layers[i]->layer()) && options.version()<CVersionNumber(7,0)) continue;
+   m_Layers[i]->writeToXML(host,c,options);
   }
   if ((CDrawing::dmLibrary==m_Mode) || (CDrawing::dmMixed==m_Mode))
   {
-   m_Library.writeToXML(host,e,defaults);
+   m_Library.writeToXML(host,e,options);
   }
   if ((CDrawing::dmSchematic==m_Mode) || (CDrawing::dmMixed==m_Mode))
   {
-   m_Schematic.writeToXML(host,e,defaults);
+   m_Schematic.writeToXML(host,e,options);
   }
   if ((CDrawing::dmBoard==m_Mode) || (CDrawing::dmMixed==m_Mode))
   {
-   m_Board.writeToXML(host,e,defaults);
+   m_Board.writeToXML(host,e,options);
   }
   root.appendChild(e);
   return true;
@@ -9356,7 +10336,7 @@ void CNote::show(std::ostream& out, const int level)
     <<std::endl;
 }
 
-bool CNote::readFromXML(const QDomElement &root)
+bool CNote::readFromXML(const QDomElement &root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="note") e = e.nextSiblingElement("note");
@@ -9391,7 +10371,7 @@ bool CNote::readFromXML(const QDomElement &root)
  return false;
 }
 
-bool CNote::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CNote::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -9461,7 +10441,7 @@ void CCompatibility::show(std::ostream& out, const int level)
  out<<"\t}"<<std::endl;
 }
 
-bool CCompatibility::readFromXML(const QDomElement &root)
+bool CCompatibility::readFromXML(const QDomElement &root, const CEagleDocumentOptions& options)
 {
  QDomElement e = root;
  if (e.nodeName()!="compatibility") e = e.nextSiblingElement("compatibility");
@@ -9472,7 +10452,7 @@ bool CCompatibility::readFromXML(const QDomElement &root)
   {
    CNote *n = new CNote();
    m_Notes.append(n);
-   n->readFromXML(c);
+   n->readFromXML(c,options);
    c = c.nextSiblingElement("note");
   }
   return true;
@@ -9480,7 +10460,7 @@ bool CCompatibility::readFromXML(const QDomElement &root)
  return false;
 }
 
-bool CCompatibility::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CCompatibility::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  if (!host.isNull() && !root.isNull())
  {
@@ -9489,7 +10469,7 @@ bool CCompatibility::writeToXML(QDomDocument& host, QDomElement& root, const boo
    QDomElement e = host.createElement("compatibility");
    for (int i = 0; i < m_Notes.size(); i++)
    {
-    m_Notes[i]->writeToXML(host,e,defaults);
+    m_Notes[i]->writeToXML(host,e,options);
    }
    root.appendChild(e);
   }
@@ -9525,7 +10505,7 @@ void CEagleDocument::clear(void)
  m_PreNotes.clear();
  m_Drawing.clear();
  m_PostNotes.clear();
- m_Version = EAGLE_DTD_VERSION;
+ m_Version = CVersionNumber(STRING(EAGLE_DTD_VERSION));
  //
  m_VerifyDocType = true;
  m_Indentation = 0;
@@ -9548,7 +10528,7 @@ void CEagleDocument::show(std::ostream& out, const int level)
 {
  CEntity::show(out,level); out<<"Eagle:"<<std::endl;
  CEntity::show(out,level); out<<"{"<<std::endl;
- CEntity::show(out,level); out<<"\tVersion="<<m_Version<<std::endl;
+ CEntity::show(out,level); out<<"\tVersion="<<m_Version.toString().toStdString()<<std::endl;
  m_PreNotes.show(out,level+1);
  m_Drawing.show(out,level+1);
  m_PostNotes.show(out,level+1);
@@ -9577,7 +10557,8 @@ bool CEagleDocument::loadFromFile(const QString& fileName)
   {
    m_ValidDocType = (dt.name()=="eagle") && (dt.systemId()=="eagle.dtd");
   }
-  m_ValidXMLdata = readFromXML(d.documentElement());
+  CEagleDocumentOptions options; // init after reading file version
+  m_ValidXMLdata = readFromXML(d.documentElement(),options);
   return true;
  }
  return false;
@@ -9590,8 +10571,11 @@ bool CEagleDocument::saveToFile(const QString& fileName)
  QDomDocument d(dt);
  QDomElement e = d.documentElement();
  QDomNode n(d.createProcessingInstruction("xml", "version=\"1.0\" encoding=\"utf-8\""));
+ CEagleDocumentOptions options;
+ options.setVersion(m_Version);
+ options.setWriteDefaults(m_WriteDefaults);
  d.insertBefore(n,d.firstChild());
- if (writeToXML(d,e,m_WriteDefaults))
+ if (writeToXML(d,e,options))
  {
   QFile f(fileName);
   if (f.open(QIODevice::WriteOnly | QIODevice::Text))
@@ -9601,21 +10585,11 @@ bool CEagleDocument::saveToFile(const QString& fileName)
    f.close();
    return true;
   }
-  /*
-  QFile f(fileName);
-  if (f.open(QIODevice::WriteOnly))
-  {
-   QByteArray a = d.toByteArray(m_Indentation);
-   f.write(a);
-   f.close();
-   return true;
-  }
-  */
  }
  return false;
 }
 
-bool CEagleDocument::readFromXML(const QDomElement& root)
+bool CEagleDocument::readFromXML(const QDomElement& root, const CEagleDocumentOptions& options)
 {
  bool result = false;
  QDomElement e = root;
@@ -9623,13 +10597,15 @@ bool CEagleDocument::readFromXML(const QDomElement& root)
  {
   if (e.nodeName()=="eagle")
   {
-   QString version_string = e.attribute("version",QString("%1").arg(m_Version));
-   m_Version = version_string.toDouble();
+   QString version_string = e.attribute("version",QString("%1").arg(m_Version.toString()));
+   m_Version.assign(version_string);
+   CEagleDocumentOptions new_options(options);
+   new_options.setVersion(m_Version);
    e = e.firstChildElement("drawing");
    //m_PreNotes.readFromXML(root) &&
    if (!e.isNull())
    {
-    result = m_Drawing.readFromXML(e);
+    result = m_Drawing.readFromXML(e,new_options);
    }
    //m_PostNotes.readFromXML(root);
    break;
@@ -9644,14 +10620,14 @@ bool CEagleDocument::readFromXML(const QDomElement& root)
  return result;
 }
 
-bool CEagleDocument::writeToXML(QDomDocument& host, QDomElement& root, const bool defaults)
+bool CEagleDocument::writeToXML(QDomDocument& host, QDomElement& root, const CEagleDocumentOptions& options)
 {
  QDomElement e = host.createElement("eagle");
- e.setAttribute("version",QString("%1").arg(m_Version));
+ e.setAttribute("version",QString("%1").arg(options.version().toString()));
  host.appendChild(e);
- m_PreNotes.writeToXML(host,e,defaults);
- m_Drawing.writeToXML(host,e,defaults);
- m_PostNotes.writeToXML(host,e,defaults);
+ m_PreNotes.writeToXML(host,e,options);
+ m_Drawing.writeToXML(host,e,options);
+ m_PostNotes.writeToXML(host,e,options);
  return true;
 }
 
