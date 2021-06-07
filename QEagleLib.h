@@ -27,7 +27,7 @@
 //------------------------------------------------------------------------------
 #define EAGLE_DTD_MIN_VERSION 6.4
 #define EAGLE_DTD_MAX_VERSION 8.0
-#define EAGLE_DTD_VERSION EAGLE_DTD_MIN_VERSION
+#define EAGLE_DTD_VERSION EAGLE_DTD_MAX_VERSION
 #define STRING(s) #s
 
 /*
